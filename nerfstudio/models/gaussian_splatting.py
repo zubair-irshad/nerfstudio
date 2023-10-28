@@ -18,32 +18,41 @@ NeRF implementation that combines many recent advancements.
 
 from __future__ import annotations
 
+import math
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Type, Union
-import torch
-from nerfstudio.data.scene_box import OrientedBox
-from copy import deepcopy
-from nerfstudio.cameras.rays import RayBundle
-from torch.nn import Parameter
-from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure,MultiScaleStructuralSimilarityIndexMeasure
-from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
-from nerfstudio.cameras.cameras import Cameras
-from gsplat._torch_impl import quat_to_rotmat
-from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes, TrainingCallbackLocation
-from nerfstudio.engine.optimizers import Optimizers
-from nerfstudio.models.base_model import Model, ModelConfig
-import math
-import numpy as np
-from sklearn.neighbors import NearestNeighbors
-import viser.transforms as vtf
-from nerfstudio.model_components.losses import scale_gauss_gradients_by_distance_squared
-from nerfstudio.cameras.camera_optimizers import CameraOptimizer, CameraOptimizerConfig
 
-from torchmetrics.image import StructuralSimilarityIndexMeasure
-from gsplat.rasterize import RasterizeGaussians
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import viser.transforms as vtf
+from sklearn.neighbors import NearestNeighbors
+from torch.nn import Parameter
+from torchmetrics.image import (MultiScaleStructuralSimilarityIndexMeasure,
+                                PeakSignalNoiseRatio,
+                                StructuralSimilarityIndexMeasure)
+from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+
+from gsplat._torch_impl import quat_to_rotmat
+from gsplat.nd_rasterize import NDRasterizeGaussians
 from gsplat.project_gaussians import ProjectGaussians
-from nerfstudio.model_components.losses import depth_ranking_loss
+from gsplat.rasterize import RasterizeGaussians
 from gsplat.sh import SphericalHarmonics, num_sh_bases
+from nerfstudio.cameras.camera_optimizers import (CameraOptimizer,
+                                                  CameraOptimizerConfig)
+from nerfstudio.cameras.cameras import Cameras
+from nerfstudio.cameras.rays import RayBundle
+from nerfstudio.data.scene_box import OrientedBox
+from nerfstudio.data.utils.labels import labels
+from nerfstudio.engine.callbacks import (TrainingCallback,
+                                         TrainingCallbackAttributes,
+                                         TrainingCallbackLocation)
+from nerfstudio.engine.optimizers import Optimizers
+from nerfstudio.model_components.losses import (
+    depth_ranking_loss, scale_gauss_gradients_by_distance_squared)
+from nerfstudio.models.base_model import Model, ModelConfig
 
 
 def random_quat_tensor(N, **kwargs):
@@ -125,6 +134,10 @@ class GaussianSplattingModelConfig(ModelConfig):
     """stop splitting at this step"""
     sh_degree: int = 4
     """maximum degree of spherical harmonics to use"""
+    feature_size: int = 20 # for segmentation currently, could experiment with others in the future
+    """size of the feature vector"""
+    features_lambda: float = 0.05
+    """weight of feature loss"""
     camera_optimizer: CameraOptimizerConfig = CameraOptimizerConfig(mode="off")
     """camera optimizer config"""
 
@@ -177,6 +190,9 @@ class GaussianSplattingModel(Model):
             self.shs_rest = torch.nn.Parameter(torch.zeros((self.num_points, 3, dim_sh - 1)))
 
         self.opacities = torch.nn.Parameter(torch.logit(0.1 * torch.ones(self.num_points, 1)))
+        self.ce_loss = nn.CrossEntropyLoss(ignore_index=255)
+        #feature_size
+        self.features = torch.nn.Parameter(torch.rand(self.num_points, self.config.feature_size, 1))
 
         # metrics
         self.psnr = PeakSignalNoiseRatio(data_range=1.0)
@@ -209,6 +225,7 @@ class GaussianSplattingModel(Model):
             torch.zeros(self.num_points, 3, num_sh_bases(self.config.sh_degree) - 1, device=self.device)
         )
         self.opacities = torch.nn.Parameter(torch.zeros(newp, 1, device=self.device))
+        self.features = torch.nn.Parameter(torch.zeros(newp, self.feature_size, 1, device=self.device))
         super().load_state_dict(dict, **kwargs)
 
     def k_nearest_sklearn(self, x: torch.Tensor, k: int):
@@ -315,19 +332,21 @@ class GaussianSplattingModel(Model):
                         split_colors,
                         split_shs,
                         split_opacities,
+                        split_features,
                         split_scales,
                         split_quats,
                     ) = self.split_gaussians(splits, nsamps)
 
                     dups = (self.scales.exp().max(dim=-1).values <= self.config.densify_size_thresh).squeeze()
                     dups &= high_grads
-                    dup_means, dup_colors, dup_shs, dup_opacities, dup_scales, dup_quats = self.dup_gaussians(dups)
+                    dup_means, dup_colors, dup_shs, dup_opacities, dup_features, dup_scales, dup_quats = self.dup_gaussians(dups)
                     self.means = Parameter(torch.cat([self.means.detach(), split_means, dup_means], dim=0))
                     self.colors = Parameter(torch.cat([self.colors.detach(), split_colors, dup_colors], dim=0))
                     self.shs_rest = Parameter(torch.cat([self.shs_rest.detach(), split_shs, dup_shs], dim=0))
                     self.opacities = Parameter(
                         torch.cat([self.opacities.detach(), split_opacities, dup_opacities], dim=0)
                     )
+                    self.features = Parameter(torch.cat([self.features.detach(), split_features, dup_features], dim=0))
                     self.scales = Parameter(torch.cat([self.scales.detach(), split_scales, dup_scales], dim=0))
                     self.quats = Parameter(torch.cat([self.quats.detach(), split_quats, dup_quats], dim=0))
                     # append zeros to the max_2Dsize tensor
@@ -387,6 +406,7 @@ class GaussianSplattingModel(Model):
         self.scales = Parameter(self.scales[~culls].detach())
         self.quats = Parameter(self.quats[~culls].detach())
         self.colors = Parameter(self.colors[~culls].detach())
+        self.features = Parameter(self.features[~culls].detach())
         self.shs_rest = Parameter(self.shs_rest[~culls].detach())
         self.opacities = Parameter(self.opacities[~culls].detach())
 
@@ -414,13 +434,16 @@ class GaussianSplattingModel(Model):
         new_shs = self.shs_rest[split_mask].repeat(samps, 1, 1)
         # step 3, sample new opacities
         new_opacities = self.opacities[split_mask].repeat(samps, 1)
+
+        #step 3.5 sample new features
+        new_features = self.features[split_mask].repeat(samps, 1, 1)
         # step 4, sample new scales
         size_fac = 1.6
         new_scales = torch.log(torch.exp(self.scales[split_mask]) / size_fac).repeat(samps, 1)
         self.scales[split_mask] = torch.log(torch.exp(self.scales[split_mask]) / size_fac)
         # step 5, sample new quats
         new_quats = self.quats[split_mask].repeat(samps, 1)
-        return new_means, new_colors, new_shs, new_opacities, new_scales, new_quats
+        return new_means, new_colors, new_shs, new_opacities, new_features, new_scales, new_quats
 
     def dup_gaussians(self, dup_mask):
         """
@@ -432,9 +455,10 @@ class GaussianSplattingModel(Model):
         dup_colors = self.colors[dup_mask]
         dup_shs = self.shs_rest[dup_mask]
         dup_opacities = self.opacities[dup_mask]
+        dup_features = self.features[dup_mask]
         dup_scales = self.scales[dup_mask]
         dup_quats = self.quats[dup_mask]
-        return dup_means, dup_colors, dup_shs, dup_opacities, dup_scales, dup_quats
+        return dup_means, dup_colors, dup_shs, dup_opacities, dup_features, dup_scales, dup_quats
 
     @property
     def num_points(self):
@@ -469,6 +493,7 @@ class GaussianSplattingModel(Model):
         return {
             "xyz": [self.means],
             "color": [self.colors],
+            "feature": [self.features],
             "shs": [self.shs_rest],
             "opacity": [self.opacities],
             "scaling": [self.scales],
@@ -488,7 +513,8 @@ class GaussianSplattingModel(Model):
 
     def _get_downscale_factor(self):
         if self.training:
-            return 2 ** max((self.config.num_downscales - self.step // self.config.resolution_schedule), 0)
+            #return 2 ** max((self.config.num_downscales - self.step // self.config.resolution_schedule), 0)
+            return 1
         else:
             return 1
 
@@ -551,16 +577,20 @@ class GaussianSplattingModel(Model):
 
         if crop_ids is not None:
             opacities_crop = self.opacities[crop_ids]
+            features_crop = self.features[crop_ids]
             means_crop = self.means[crop_ids]
             colors_crop = self.get_colors[crop_ids]
             scales_crop = self.scales[crop_ids]
             quats_crop = self.quats[crop_ids]
         else:
             opacities_crop = self.opacities
+            features_crop = self.features
             means_crop = self.means
             colors_crop = self.get_colors
             scales_crop = self.scales
             quats_crop = self.quats
+
+
         self.xys, depths, self.radii, conics, num_tiles_hit, cov3d = ProjectGaussians.apply(
             means_crop,
             torch.exp(scales_crop),
@@ -595,6 +625,7 @@ class GaussianSplattingModel(Model):
         else:
             rgbs = self.get_colors.squeeze()  # (N, 3)
             rgbs = torch.sigmoid(rgbs)
+        
         rgb = RasterizeGaussians.apply(
             self.xys,
             depths,
@@ -619,10 +650,35 @@ class GaussianSplattingModel(Model):
             H,
             W,
             torch.ones(3, device=self.device) * 10,
-        )[..., 0:1]
+        )[..., 0:1] 
+        out_features = None
+        # out_features = NDRasterizeGaussians.apply(
+        #     self.xys.detach(),
+        #     depths.detach(),
+        #     self.radii,
+        #     conics.detach(),
+        #     num_tiles_hit,
+        #     features_crop.squeeze(-1),
+        #     torch.sigmoid(opacities_crop.detach()),
+        #     H,
+        #     W,
+        # )
+
+        out_features = NDRasterizeGaussians.apply(
+            self.xys,
+            depths,
+            self.radii,
+            conics,
+            num_tiles_hit,
+            features_crop.squeeze(-1),
+            torch.sigmoid(opacities_crop),
+            H,
+            W,
+        )
+
         # rescale the camera back to original dimensions
         camera.rescale_output_resolution(camera_downscale)
-        return {"rgb": rgb, "depth": depth_im}
+        return {"rgb": rgb, "depth": depth_im, "feat_out": out_features}
 
     def get_metrics_dict(self, outputs, batch) -> Dict[str, torch.Tensor]:
         """Compute and returns metrics.
@@ -638,17 +694,69 @@ class GaussianSplattingModel(Model):
 
             newsize = (batch["image"].shape[0] // d, batch["image"].shape[1] // d)
             gt_img = TF.resize(batch["image"].permute(2, 0, 1), newsize).permute(1, 2, 0)
+            gt_semantic = torch.nn.functional.interpolate(batch["mask"].unsqueeze(0).unsqueeze(0), newsize, mode='nearest')
+            gt_semantic = gt_semantic.squeeze(0).squeeze(0).long().to(self.device)
         else:
             gt_img = batch["image"]
+            gt_semantic = batch["mask"].long().to(self.device)
         metrics_dict = {}
         gt_rgb = gt_img.to(self.device)  # RGB or RGBA image
         # gt_rgb = self.renderer_rgb.blend_background(gt_rgb)  # Blend if RGBA
         predicted_rgb = outputs["rgb"]
         metrics_dict["psnr"] = self.psnr(predicted_rgb, gt_rgb)
 
+        #get semantic segmentation metrics
+
+        predicted_semantic = outputs["feat_out"]
+        predicted_semantic = predicted_semantic.argmax(dim=-1)
+        predicted_semantic = predicted_semantic.long()
+
+        # print("gt semantic shape", gt_semantic.shape)
+        # print("predicted semantic shape", predicted_semantic.shape)
+        # print("predicted semantic shape", predicted_semantic.shape)
+        # print("gt semantic shape", gt_semantic.shape)
+        # print("predicted semantic dtype", predicted_semantic.dtype)
+        # print("gt semantic dtype", gt_semantic.dtype)
+
+        #just output the predicted semantic segmentation metrics
+
+        metrics_dict["semantic_acc"] = self.semantic_acc(predicted_semantic, gt_semantic)
+        metrics_dict["semantic_iou"] = self.semantic_iou(predicted_semantic, gt_semantic)
+
         self.camera_optimizer.get_metrics_dict(metrics_dict)
         metrics_dict['gaussian_count'] = self.num_points
         return metrics_dict
+    
+    #Now lets define the semantic segmentation metrics
+
+    def semantic_acc(self, predicted, gt):
+        # Exclude the class with index 255
+        mask = gt != 255
+        predicted = predicted[mask]
+        gt = gt[mask]
+
+        correct = (predicted == gt).sum().item()
+        total = mask.sum().item()
+        accuracy = correct / total
+        return accuracy
+    
+    def semantic_iou(self, predicted, gt):
+        # Exclude the class with index 255
+        mask = gt != 255
+        predicted = predicted[mask]
+        gt = gt[mask]
+
+        intersection = torch.logical_and(predicted == gt, gt != 255).sum().item()
+        union = torch.logical_or(predicted == gt, gt != 255).sum().item()
+        iou = intersection / union
+        return iou
+    
+    
+    def cross_entropy_loss(self, network_output, gt):
+        network_output = network_output.view(-1, network_output.shape[-1])
+        gt = gt.view(-1)
+        return F.cross_entropy(network_output, gt, ignore_index=255)
+        # return self.ce_loss(network_output, gt)
 
     def get_loss_dict(self, outputs, batch, metrics_dict=None) -> Dict[str, torch.Tensor]:
         """Computes and returns the losses dict.
@@ -658,18 +766,26 @@ class GaussianSplattingModel(Model):
             batch: ground truth batch corresponding to outputs
             metrics_dict: dictionary of metrics, some of which we can use for loss
         """
+
         d = self._get_downscale_factor()
         if d > 1:
             # use torchvision to resize
             import torchvision.transforms.functional as TF
-
             newsize = (batch["image"].shape[0] // d, batch["image"].shape[1] // d)
             gt_img = TF.resize(batch["image"].permute(2, 0, 1), newsize).permute(1, 2, 0)
+            gt_seg = torch.nn.functional.interpolate(batch["mask"].unsqueeze(0).unsqueeze(0), newsize, mode='nearest')
+            gt_seg = gt_seg.squeeze(0).squeeze(0).long().to(self.device)
         else:
             gt_img = batch["image"]
+            gt_seg = batch["mask"].long().to(self.device)
         Ll1 = torch.abs(gt_img - outputs["rgb"]).mean()
         simloss = 1 - self.ssim(gt_img.permute(2, 0, 1)[None, ...], outputs["rgb"].permute(2, 0, 1)[None, ...])
-        return {"main_loss": (1 - self.config.ssim_lambda) * Ll1 + self.config.ssim_lambda * simloss}
+
+        #cross entropy loss for features here since features == segmentation currently. 
+        # in future this loss could change
+
+        semantic_loss = self.cross_entropy_loss(outputs["feat_out"], gt_seg)
+        return {"main_loss": (1 - self.config.ssim_lambda) * Ll1 + self.config.ssim_lambda * simloss + self.config.features_lambda * semantic_loss}
 
     @torch.no_grad()
     def get_outputs_for_camera_ray_bundle(
@@ -683,6 +799,34 @@ class GaussianSplattingModel(Model):
         assert camera is not None, "must provide camera to gaussian model"
         outs = self.get_outputs(camera.to(self.device))
         return outs
+
+
+    def map_gt_semantic_to_color(self, logits):
+
+        # print("logits shape", logits.shape)
+        id_to_color = {label.id: label.color for label in labels}
+
+        image = torch.zeros((logits.shape[0], logits.shape[1], 3), dtype=torch.float32, device="cuda")
+        for id, color in id_to_color.items():
+            normalized_color = [x / 255.0 for x in color]
+            image[logits == id] = torch.tensor(normalized_color, dtype=torch.float32, device="cuda")
+
+        # image = image.permute(2, 0, 1)
+        return image
+
+    def visualize_pred_semantic(self,logits):
+        logits = torch.argmax(logits, dim=-1)
+
+        id_to_color = {label.id: label.color for label in labels}
+        image = torch.zeros((logits.shape[0], logits.shape[1], 3), dtype=torch.float32, device="cuda")
+
+        #color is a tuple RGB values convert them to integers 
+        for id, color in id_to_color.items():
+            normalized_color = [x / 255.0 for x in color]
+            image[logits == id] = torch.tensor(normalized_color, dtype=torch.float32, device="cuda")
+        # image = image.permute(2, 0, 1)
+        # print("image shape", image.shape)
+        return image
 
     def get_image_metrics_and_images(
         self, outputs: Dict[str, torch.Tensor], batch: Dict[str, torch.Tensor]
@@ -701,7 +845,13 @@ class GaussianSplattingModel(Model):
         gt_rgb = batch["image"].to(self.device)
         predicted_rgb = outputs["rgb"]  # Blended with background (black if random background)
 
+        predicted_semantic = self.visualize_pred_semantic(outputs["feat_out"])
+        gt_semantic = self.map_gt_semantic_to_color(batch["mask"].long()).to(self.device)
+        # Get the semantic visualization as well
+        #combined_rgb = torch.cat([gt_rgb, predicted_rgb], dim=1)
         combined_rgb = torch.cat([gt_rgb, predicted_rgb], dim=1)
+
+        combined_semantic = torch.cat([gt_semantic, predicted_semantic], dim=1)
 
         # Switch images from [H, W, C] to [1, C, H, W] for metrics computations
         gt_rgb = torch.moveaxis(gt_rgb, -1, 0)[None, ...]
@@ -715,6 +865,6 @@ class GaussianSplattingModel(Model):
         metrics_dict = {"psnr": float(psnr.item()), "ssim": float(ssim)}  # type: ignore
         metrics_dict["lpips"] = float(lpips)
 
-        images_dict = {"img": combined_rgb}
+        images_dict = {"rgb": combined_rgb, "semantic": combined_semantic}
 
         return metrics_dict, images_dict

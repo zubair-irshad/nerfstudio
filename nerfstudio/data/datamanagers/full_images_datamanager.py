@@ -22,23 +22,27 @@ paradigm
 from __future__ import annotations
 
 import random
+from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, ForwardRef, Generic, List, Literal, Optional, Tuple, Type, Union, cast, get_args, get_origin
+from typing import (Dict, ForwardRef, Generic, List, Literal, Optional, Tuple,
+                    Type, Union, cast, get_args, get_origin)
 
 import cv2
 import numpy as np
 import torch
-from copy import deepcopy
 from torch.nn import Parameter
 from tqdm import tqdm
 
 from nerfstudio.cameras.cameras import Cameras, CameraType
 from nerfstudio.configs.dataparser_configs import AnnotatedDataParserUnion
-from nerfstudio.data.datamanagers.base_datamanager import DataManager, DataManagerConfig, TDataset
+from nerfstudio.data.datamanagers.base_datamanager import (DataManager,
+                                                           DataManagerConfig,
+                                                           TDataset)
 from nerfstudio.data.dataparsers.base_dataparser import DataparserOutputs
-from nerfstudio.data.dataparsers.nerfstudio_dataparser import NerfstudioDataParserConfig
+from nerfstudio.data.dataparsers.nerfstudio_dataparser import \
+    NerfstudioDataParserConfig
 from nerfstudio.data.datasets.base_dataset import InputDataset
 # from nerfstudio.data.utils.dataloaders import FixedIndicesEvalDataloader
 from nerfstudio.utils.misc import get_orig_class
@@ -121,6 +125,7 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
     def cache_images(self, cache_images_option):
         cached_train = []
         CONSOLE.log("Caching / undistorting train images")
+
         for i in tqdm(range(len(self.train_dataset)), leave=False):
             # cv2.undistort the images / cameras
             data = self.train_dataset.get_data(i)
@@ -147,7 +152,9 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
                 # crop the image and update the intrinsics accordingly
                 x, y, w, h = roi
                 image = image[y : y + h, x : x + w]
+
                 if 'mask' in data:
+                    # mask = cv2.undistort(data['mask'], K, distortion_params, None, newK)
                     data['mask'] = data['mask'][y : y + h, x : x + w]
                 if 'depth_image' in data:
                     data['depth_image'] = data['depth_image'][y : y + h, x : x + w]
@@ -218,6 +225,12 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
                 # crop the image and update the intrinsics accordingly
                 x, y, w, h = roi
                 image = image[y : y + h, x : x + w]
+
+                if 'mask' in data:
+                    data['mask'] = data['mask'][y : y + h, x : x + w]
+                if 'depth_image' in data:
+                    data['depth_image'] = data['depth_image'][y : y + h, x : x + w]
+
                 K = newK
                 # update the width, height
                 self.eval_dataset.cameras.width[i] = w

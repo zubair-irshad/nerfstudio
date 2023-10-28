@@ -31,7 +31,8 @@ from torch.utils.data import Dataset
 
 from nerfstudio.cameras.cameras import Cameras
 from nerfstudio.data.dataparsers.base_dataparser import DataparserOutputs
-from nerfstudio.data.utils.data_utils import get_image_mask_tensor_from_path
+from nerfstudio.data.utils.data_utils import (
+    get_image_mask_tensor_from_path, get_segmentation_tensor_from_path)
 
 
 class InputDataset(Dataset):
@@ -65,11 +66,15 @@ class InputDataset(Dataset):
         """
         image_filename = self._dataparser_outputs.image_filenames[image_idx]
         pil_image = Image.open(image_filename)
+
         if self.scale_factor != 1.0:
             width, height = pil_image.size
             newsize = (int(width * self.scale_factor), int(height * self.scale_factor))
             pil_image = pil_image.resize(newsize, resample=Image.BILINEAR)
+
         image = np.array(pil_image, dtype="uint8")  # shape is (h, w) or (h, w, 3 or 4)
+
+        print("image.shape", image.shape)
         if len(image.shape) == 2:
             image = image[:, :, None].repeat(3, axis=2)
         assert len(image.shape) == 3
@@ -84,6 +89,8 @@ class InputDataset(Dataset):
             image_idx: The image index in the dataset.
         """
         image = torch.from_numpy(self.get_numpy_image(image_idx).astype("float32") / 255.0)
+        print("image.shape", image.shape)
+        print("self._dataparser_outputs.alpha_color", self._dataparser_outputs.alpha_color)
         if self._dataparser_outputs.alpha_color is not None and image.shape[-1] == 4:
             image = image[:, :, :3] * image[:, :, -1:] + self._dataparser_outputs.alpha_color * (1.0 - image[:, :, -1:])
         return image
@@ -95,10 +102,19 @@ class InputDataset(Dataset):
             image_idx: The image index in the dataset.
         """
         image = self.get_image(image_idx)
+        print("image get data.shape", image.shape)
         data = {"image_idx": image_idx, "image": image}
         if self._dataparser_outputs.mask_filenames is not None:
+
+            # A different logic would probably break training object-centric models but here we are using masks as segmentation ground truth
+
             mask_filepath = self._dataparser_outputs.mask_filenames[image_idx]
-            data["mask"] = get_image_mask_tensor_from_path(filepath=mask_filepath, scale_factor=self.scale_factor)
+
+            data["mask"] = get_segmentation_tensor_from_path(filepath=mask_filepath, scale_factor=self.scale_factor)
+            #data["mask"] = get_image_mask_tensor_from_path(filepath=mask_filepath, scale_factor=self.scale_factor)
+            # assert (
+            #     data["mask"].shape[:2] == data["image"].shape[:2]
+            # ), f"Mask and image have different shapes. Got {data['mask'].shape[:2]} and {data['image'].shape[:2]}"
             assert (
                 data["mask"].shape[:2] == data["image"].shape[:2]
             ), f"Mask and image have different shapes. Got {data['mask'].shape[:2]} and {data['image'].shape[:2]}"
