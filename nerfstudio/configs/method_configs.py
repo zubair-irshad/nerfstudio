@@ -612,12 +612,12 @@ method_configs["gaussian-splatting"] = TrainerConfig(
 
 
     pipeline=VanillaPipelineConfig(
+        # datamanager=FullImageDatamanagerConfig(
+        #     dataparser=ColmapDataParserConfig(load_3D_points=True),
+        # ),
 
-        datamanager=VanillaDataManagerConfig(
-            _target=VanillaDataManager[SDFDataset],
-            dataparser=SDFStudioDataParserConfig(),
-            train_num_rays_per_batch=1024,
-            eval_num_rays_per_batch=1024,
+        datamanager=FullImageDatamanagerConfig(
+            dataparser=BlenderDataParserConfig(),
         ),
         # datamanager=FullImageDatamanagerConfig(
         #     dataparser=ColmapDataParserConfig(load_3D_points=True),

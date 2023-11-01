@@ -28,6 +28,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import viser.transforms as vtf
+from gsplat._torch_impl import quat_to_rotmat
+from gsplat.nd_rasterize import NDRasterizeGaussians
+from gsplat.project_gaussians import ProjectGaussians
+from gsplat.rasterize import RasterizeGaussians
+from gsplat.sh import SphericalHarmonics, num_sh_bases
 from sklearn.neighbors import NearestNeighbors
 from torch.nn import Parameter
 from torchmetrics.image import (MultiScaleStructuralSimilarityIndexMeasure,
@@ -35,11 +40,6 @@ from torchmetrics.image import (MultiScaleStructuralSimilarityIndexMeasure,
                                 StructuralSimilarityIndexMeasure)
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
-from gsplat._torch_impl import quat_to_rotmat
-from gsplat.nd_rasterize import NDRasterizeGaussians
-from gsplat.project_gaussians import ProjectGaussians
-from gsplat.rasterize import RasterizeGaussians
-from gsplat.sh import SphericalHarmonics, num_sh_bases
 from nerfstudio.cameras.camera_optimizers import (CameraOptimizer,
                                                   CameraOptimizerConfig)
 from nerfstudio.cameras.cameras import Cameras
@@ -513,7 +513,8 @@ class GaussianSplattingModel(Model):
 
     def _get_downscale_factor(self):
         if self.training:
-            #return 2 ** max((self.config.num_downscales - self.step // self.config.resolution_schedule), 0)
+            ## return 2 ** max((self.config.num_downscales - self.step // self.config.resolution_schedule), 0)
+            return 1
             return 1
         else:
             return 1
