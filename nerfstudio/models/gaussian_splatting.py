@@ -18,32 +18,37 @@ NeRF implementation that combines many recent advancements.
 
 from __future__ import annotations
 
+import math
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Type, Union
-import torch
-from nerfstudio.data.scene_box import OrientedBox
-from copy import deepcopy
-from nerfstudio.cameras.rays import RayBundle
-from torch.nn import Parameter
-from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure,MultiScaleStructuralSimilarityIndexMeasure
-from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
-from nerfstudio.cameras.cameras import Cameras
-from gsplat._torch_impl import quat_to_rotmat
-from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes, TrainingCallbackLocation
-from nerfstudio.engine.optimizers import Optimizers
-from nerfstudio.models.base_model import Model, ModelConfig
-import math
-import numpy as np
-from sklearn.neighbors import NearestNeighbors
-import viser.transforms as vtf
-from nerfstudio.model_components.losses import scale_gauss_gradients_by_distance_squared
-from nerfstudio.cameras.camera_optimizers import CameraOptimizer, CameraOptimizerConfig
 
-from torchmetrics.image import StructuralSimilarityIndexMeasure
-from gsplat.rasterize import RasterizeGaussians
+import numpy as np
+import torch
+import viser.transforms as vtf
+from gsplat._torch_impl import quat_to_rotmat
 from gsplat.project_gaussians import ProjectGaussians
-from nerfstudio.model_components.losses import depth_ranking_loss
+from gsplat.rasterize import RasterizeGaussians
 from gsplat.sh import SphericalHarmonics, num_sh_bases
+from sklearn.neighbors import NearestNeighbors
+from torch.nn import Parameter
+from torchmetrics.image import (MultiScaleStructuralSimilarityIndexMeasure,
+                                PeakSignalNoiseRatio,
+                                StructuralSimilarityIndexMeasure)
+from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+
+from nerfstudio.cameras.camera_optimizers import (CameraOptimizer,
+                                                  CameraOptimizerConfig)
+from nerfstudio.cameras.cameras import Cameras
+from nerfstudio.cameras.rays import RayBundle
+from nerfstudio.data.scene_box import OrientedBox
+from nerfstudio.engine.callbacks import (TrainingCallback,
+                                         TrainingCallbackAttributes,
+                                         TrainingCallbackLocation)
+from nerfstudio.engine.optimizers import Optimizers
+from nerfstudio.model_components.losses import (
+    depth_ranking_loss, scale_gauss_gradients_by_distance_squared)
+from nerfstudio.models.base_model import Model, ModelConfig
 
 
 def random_quat_tensor(N, **kwargs):
@@ -488,7 +493,8 @@ class GaussianSplattingModel(Model):
 
     def _get_downscale_factor(self):
         if self.training:
-            return 2 ** max((self.config.num_downscales - self.step // self.config.resolution_schedule), 0)
+            # return 2 ** max((self.config.num_downscales - self.step // self.config.resolution_schedule), 0)
+            return 1
         else:
             return 1
 

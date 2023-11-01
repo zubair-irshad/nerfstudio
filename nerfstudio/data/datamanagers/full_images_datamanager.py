@@ -22,23 +22,27 @@ paradigm
 from __future__ import annotations
 
 import random
+from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, ForwardRef, Generic, List, Literal, Optional, Tuple, Type, Union, cast, get_args, get_origin
+from typing import (Dict, ForwardRef, Generic, List, Literal, Optional, Tuple,
+                    Type, Union, cast, get_args, get_origin)
 
 import cv2
 import numpy as np
 import torch
-from copy import deepcopy
 from torch.nn import Parameter
 from tqdm import tqdm
 
 from nerfstudio.cameras.cameras import Cameras, CameraType
 from nerfstudio.configs.dataparser_configs import AnnotatedDataParserUnion
-from nerfstudio.data.datamanagers.base_datamanager import DataManager, DataManagerConfig, TDataset
+from nerfstudio.data.datamanagers.base_datamanager import (DataManager,
+                                                           DataManagerConfig,
+                                                           TDataset)
 from nerfstudio.data.dataparsers.base_dataparser import DataparserOutputs
-from nerfstudio.data.dataparsers.nerfstudio_dataparser import NerfstudioDataParserConfig
+from nerfstudio.data.dataparsers.nerfstudio_dataparser import \
+    NerfstudioDataParserConfig
 from nerfstudio.data.datasets.base_dataset import InputDataset
 # from nerfstudio.data.utils.dataloaders import FixedIndicesEvalDataloader
 from nerfstudio.utils.misc import get_orig_class
@@ -123,138 +127,167 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
         CONSOLE.log("Caching / undistorting train images")
         for i in tqdm(range(len(self.train_dataset)), leave=False):
             # cv2.undistort the images / cameras
+
+            #Only do undistortion if the camera has distortion parameters
+
+
             data = self.train_dataset.get_data(i)
             camera = self.train_dataset.cameras[i].reshape(())
             K = camera.get_intrinsics_matrices().numpy()
-            distortion_params = camera.distortion_params.numpy()
-            image = data["image"].numpy()
+            
+            if camera.distortion_params is None:
+                #If there are no distortion parameters, then skip undistortion
+                image = data["image"].numpy()
+                data["image"] = torch.from_numpy(image)
+                if "mask" in data:
+                    mask = data["mask"].numpy()
+                cached_train.append(data)
 
-            if camera.camera_type.item() == CameraType.PERSPECTIVE.value:
-                distortion_params = np.array(
-                    [
-                        distortion_params[0],
-                        distortion_params[1],
-                        distortion_params[4],
-                        distortion_params[5],
-                        distortion_params[2],
-                        distortion_params[3],
-                        0,
-                        0,
-                    ]
-                )
-                newK, roi = cv2.getOptimalNewCameraMatrix(K, distortion_params, (image.shape[1], image.shape[0]), 0)
-                image = cv2.undistort(image, K, distortion_params, None, newK)
-                # crop the image and update the intrinsics accordingly
-                x, y, w, h = roi
-                image = image[y : y + h, x : x + w]
-                if 'mask' in data:
-                    data['mask'] = data['mask'][y : y + h, x : x + w]
-                if 'depth_image' in data:
-                    data['depth_image'] = data['depth_image'][y : y + h, x : x + w]
-                K = newK
-                # update the width, height
-                self.train_dataset.cameras.width[i] = w
-                self.train_dataset.cameras.height[i] = h
-
-            elif camera.camera_type.item() == CameraType.FISHEYE.value:
-                distortion_params = np.array(
-                    [distortion_params[0], distortion_params[1], distortion_params[2], distortion_params[3]]
-                )
-                newK = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
-                    K, distortion_params, (image.shape[1], image.shape[0]), np.eye(3), balance=0
-                )
-                map1, map2 = cv2.fisheye.initUndistortRectifyMap(
-                    K, distortion_params, np.eye(3), newK, (image.shape[1], image.shape[0]), cv2.CV_32FC1
-                )
-                # and then remap:
-                image = cv2.remap(image, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
-                K = newK
             else:
-                raise NotImplementedError("Only perspective and fisheye cameras are supported")
-            data["image"] = torch.from_numpy(image)
+                #If there are distortion parameters, then undistort the image
+                distortion_params = camera.distortion_params.numpy()
+                image = data["image"].numpy()
 
-            if "mask" in data:
-                mask = data["mask"].numpy()
                 if camera.camera_type.item() == CameraType.PERSPECTIVE.value:
-                    mask = cv2.undistort(mask, K, distortion_params, None, None)
+                    distortion_params = np.array(
+                        [
+                            distortion_params[0],
+                            distortion_params[1],
+                            distortion_params[4],
+                            distortion_params[5],
+                            distortion_params[2],
+                            distortion_params[3],
+                            0,
+                            0,
+                        ]
+                    )
+                    newK, roi = cv2.getOptimalNewCameraMatrix(K, distortion_params, (image.shape[1], image.shape[0]), 0)
+                    image = cv2.undistort(image, K, distortion_params, None, newK)
+                    # crop the image and update the intrinsics accordingly
+                    x, y, w, h = roi
+                    image = image[y : y + h, x : x + w]
+                    if 'mask' in data:
+                        data['mask'] = data['mask'][y : y + h, x : x + w]
+                    if 'depth_image' in data:
+                        data['depth_image'] = data['depth_image'][y : y + h, x : x + w]
+                    K = newK
+                    # update the width, height
+                    self.train_dataset.cameras.width[i] = w
+                    self.train_dataset.cameras.height[i] = h
+
                 elif camera.camera_type.item() == CameraType.FISHEYE.value:
-                    mask = cv2.fisheye.undistortImage(mask, K, distortion_params, None, None)
+                    distortion_params = np.array(
+                        [distortion_params[0], distortion_params[1], distortion_params[2], distortion_params[3]]
+                    )
+                    newK = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
+                        K, distortion_params, (image.shape[1], image.shape[0]), np.eye(3), balance=0
+                    )
+                    map1, map2 = cv2.fisheye.initUndistortRectifyMap(
+                        K, distortion_params, np.eye(3), newK, (image.shape[1], image.shape[0]), cv2.CV_32FC1
+                    )
+                    # and then remap:
+                    image = cv2.remap(image, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+                    K = newK
                 else:
                     raise NotImplementedError("Only perspective and fisheye cameras are supported")
-                data["mask"] = torch.from_numpy(mask)
+                data["image"] = torch.from_numpy(image)
 
-            cached_train.append(data)
+                if "mask" in data:
+                    mask = data["mask"].numpy()
+                    if camera.camera_type.item() == CameraType.PERSPECTIVE.value:
+                        mask = cv2.undistort(mask, K, distortion_params, None, None)
+                    elif camera.camera_type.item() == CameraType.FISHEYE.value:
+                        mask = cv2.fisheye.undistortImage(mask, K, distortion_params, None, None)
+                    else:
+                        raise NotImplementedError("Only perspective and fisheye cameras are supported")
+                    data["mask"] = torch.from_numpy(mask)
 
-            self.train_dataset.cameras.fx[i] = float(K[0, 0])
-            self.train_dataset.cameras.fy[i] = float(K[1, 1])
-            self.train_dataset.cameras.cx[i] = float(K[0, 2])
-            self.train_dataset.cameras.cy[i] = float(K[1, 2])
+                cached_train.append(data)
+
+                self.train_dataset.cameras.fx[i] = float(K[0, 0])
+                self.train_dataset.cameras.fy[i] = float(K[1, 1])
+                self.train_dataset.cameras.cx[i] = float(K[0, 2])
+                self.train_dataset.cameras.cy[i] = float(K[1, 2])
 
         cached_eval = []
         CONSOLE.log("Caching / undistorting eval images")
-        for i in tqdm(range(len(self.eval_dataset)), leave=False):
-            # cv2.undistort the images / cameras
-            data = self.eval_dataset.get_data(i)
-            camera = self.eval_dataset.cameras[i].reshape(())
-            K = camera.get_intrinsics_matrices().numpy()
-            distortion_params = camera.distortion_params.numpy()
-            image = data["image"].numpy()
 
-            if camera.camera_type.item() == CameraType.PERSPECTIVE.value:
-                distortion_params = np.array(
-                    [
-                        distortion_params[0],
-                        distortion_params[1],
-                        distortion_params[4],
-                        distortion_params[5],
-                        distortion_params[2],
-                        distortion_params[3],
-                        0,
-                        0,
-                    ]
-                )
-                newK, roi = cv2.getOptimalNewCameraMatrix(K, distortion_params, (image.shape[1], image.shape[0]), 0)
-                image = cv2.undistort(image, K, distortion_params, None, newK)
-                # crop the image and update the intrinsics accordingly
-                x, y, w, h = roi
-                image = image[y : y + h, x : x + w]
-                K = newK
-                # update the width, height
-                self.eval_dataset.cameras.width[i] = w
-                self.eval_dataset.cameras.height[i] = h
-            elif camera.camera_type.item() == CameraType.FISHEYE.value:
-                distortion_params = np.array(
-                    [distortion_params[0], distortion_params[1], distortion_params[2], distortion_params[3]]
-                )
-                newK = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
-                    K, distortion_params, (image.shape[1], image.shape[0]), np.eye(3), balance=0
-                )
-                map1, map2 = cv2.fisheye.initUndistortRectifyMap(
-                    K, distortion_params, np.eye(3), newK, (image.shape[1], image.shape[0]), cv2.CV_32FC1
-                )
-                # and then remap:
-                image = cv2.remap(image, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
-                K = newK
-            else:
-                raise NotImplementedError("Only perspective and fisheye cameras are supported")
-            data["image"] = torch.from_numpy(image)
+        #Only do undistortion if the camera has distortion parameters
 
-            if "mask" in data:
-                mask = data["mask"].numpy()
+        if camera.distortion_params is None:
+            #If there are no distortion parameters, then skip undistortion
+            for i in tqdm(range(len(self.eval_dataset)), leave=False):
+                data = self.eval_dataset.get_data(i)
+                image = data["image"].numpy()
+                data["image"] = torch.from_numpy(image)
+                cached_eval.append(data)
+                if "mask" in data:
+                    mask = data["mask"].numpy()
+
+        else:
+            for i in tqdm(range(len(self.eval_dataset)), leave=False):
+                # cv2.undistort the images / cameras
+                data = self.eval_dataset.get_data(i)
+                camera = self.eval_dataset.cameras[i].reshape(())
+                K = camera.get_intrinsics_matrices().numpy()
+                distortion_params = camera.distortion_params.numpy()
+                image = data["image"].numpy()
+
                 if camera.camera_type.item() == CameraType.PERSPECTIVE.value:
-                    mask = cv2.undistort(mask, K, distortion_params, None, None)
+                    distortion_params = np.array(
+                        [
+                            distortion_params[0],
+                            distortion_params[1],
+                            distortion_params[4],
+                            distortion_params[5],
+                            distortion_params[2],
+                            distortion_params[3],
+                            0,
+                            0,
+                        ]
+                    )
+                    newK, roi = cv2.getOptimalNewCameraMatrix(K, distortion_params, (image.shape[1], image.shape[0]), 0)
+                    image = cv2.undistort(image, K, distortion_params, None, newK)
+                    # crop the image and update the intrinsics accordingly
+                    x, y, w, h = roi
+                    image = image[y : y + h, x : x + w]
+                    K = newK
+                    # update the width, height
+                    self.eval_dataset.cameras.width[i] = w
+                    self.eval_dataset.cameras.height[i] = h
                 elif camera.camera_type.item() == CameraType.FISHEYE.value:
-                    mask = cv2.fisheye.undistortImage(mask, K, distortion_params, None, None)
+                    distortion_params = np.array(
+                        [distortion_params[0], distortion_params[1], distortion_params[2], distortion_params[3]]
+                    )
+                    newK = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
+                        K, distortion_params, (image.shape[1], image.shape[0]), np.eye(3), balance=0
+                    )
+                    map1, map2 = cv2.fisheye.initUndistortRectifyMap(
+                        K, distortion_params, np.eye(3), newK, (image.shape[1], image.shape[0]), cv2.CV_32FC1
+                    )
+                    # and then remap:
+                    image = cv2.remap(image, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+                    K = newK
                 else:
                     raise NotImplementedError("Only perspective and fisheye cameras are supported")
-                data["mask"] = torch.from_numpy(mask)
+                data["image"] = torch.from_numpy(image)
 
-            cached_eval.append(data)
+                if "mask" in data:
+                    mask = data["mask"].numpy()
+                    if camera.camera_type.item() == CameraType.PERSPECTIVE.value:
+                        mask = cv2.undistort(mask, K, distortion_params, None, None)
+                    elif camera.camera_type.item() == CameraType.FISHEYE.value:
+                        mask = cv2.fisheye.undistortImage(mask, K, distortion_params, None, None)
+                    else:
+                        raise NotImplementedError("Only perspective and fisheye cameras are supported")
+                    data["mask"] = torch.from_numpy(mask)
 
-            self.eval_dataset.cameras.fx[i] = float(K[0, 0])
-            self.eval_dataset.cameras.fy[i] = float(K[1, 1])
-            self.eval_dataset.cameras.cx[i] = float(K[0, 2])
-            self.eval_dataset.cameras.cy[i] = float(K[1, 2])
+                cached_eval.append(data)
+
+                self.eval_dataset.cameras.fx[i] = float(K[0, 0])
+                self.eval_dataset.cameras.fy[i] = float(K[1, 1])
+                self.eval_dataset.cameras.cx[i] = float(K[0, 2])
+                self.eval_dataset.cameras.cy[i] = float(K[1, 2])
 
         if cache_images_option == "gpu":
             for cache in cached_train:
