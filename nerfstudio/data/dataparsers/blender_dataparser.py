@@ -108,11 +108,11 @@ class Blender(DataParser):
         camera_angle_x = float(meta["camera_angle_x"])
         focal_length = 0.5 * image_width / np.tan(0.5 * camera_angle_x)
 
-        # cx = image_width / 2.0
-        # cy = image_height / 2.0
+        cx = image_width / 2.0
+        cy = image_height / 2.0
 
-        cx = (image_width - 1.0) / 2.0
-        cy = (image_height - 1.0) / 2.0
+        # cx = (image_width - 1.0) / 2.0
+        # cy = (image_height - 1.0) / 2.0
 
         camera_to_worlds = torch.from_numpy(poses)  # camera to world transform
         
