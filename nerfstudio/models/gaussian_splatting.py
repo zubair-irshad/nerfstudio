@@ -653,29 +653,29 @@ class GaussianSplattingModel(Model):
             torch.ones(3, device=self.device) * 10,
         )[..., 0:1] 
         out_features = None
-        # out_features = NDRasterizeGaussians.apply(
-        #     self.xys.detach(),
-        #     depths.detach(),
-        #     self.radii,
-        #     conics.detach(),
-        #     num_tiles_hit,
-        #     features_crop.squeeze(-1),
-        #     torch.sigmoid(opacities_crop.detach()),
-        #     H,
-        #     W,
-        # )
 
         out_features = NDRasterizeGaussians.apply(
-            self.xys,
-            depths,
+            self.xys.detach(),
+            depths.detach(),
             self.radii,
-            conics,
+            conics.detach(),
             num_tiles_hit,
             features_crop.squeeze(-1),
-            torch.sigmoid(opacities_crop),
+            torch.sigmoid(opacities_crop.detach()),
             H,
             W,
         )
+        # out_features = NDRasterizeGaussians.apply(
+        #     self.xys,
+        #     depths,
+        #     self.radii,
+        #     conics,
+        #     num_tiles_hit,
+        #     features_crop.squeeze(-1),
+        #     torch.sigmoid(opacities_crop),
+        #     H,
+        #     W,
+        # )
 
         # rescale the camera back to original dimensions
         camera.rescale_output_resolution(camera_downscale)
