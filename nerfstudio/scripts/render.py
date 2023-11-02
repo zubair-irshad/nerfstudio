@@ -24,6 +24,7 @@ import os
 import shutil
 import struct
 import sys
+import time
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -164,10 +165,17 @@ def _render_trajectory_video(
                             camera_ray_bundle, camera=cameras[camera_idx : camera_idx + 1]
                         )
                 else:
+
+                    #measure this time
+
+                    start_time = time.time()
                     with torch.no_grad():
                         outputs = pipeline.model.get_outputs_for_camera_ray_bundle(
                             camera_ray_bundle, camera=cameras[camera_idx : camera_idx + 1]
                         )
+                    end_time = time.time()
+                    print("Time taken for inference: ", end_time - start_time)
+                    print("FPS: ", 1/(end_time - start_time))
 
                 render_image = []
                 for rendered_output_name in rendered_output_names:
