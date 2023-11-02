@@ -47,6 +47,31 @@ def get_segmentation_tensor_from_path(filepath: Path, scale_factor: float = 1.0)
 
     return semantic
 
+def get_segmentation_tensor_from_path_replica(filepath: Path, scale_factor: float = 1.0) -> torch.Tensor:
+
+    # semantic = Image.open(filepath)
+
+    semantic = cv2.imread(str(filepath), cv2.IMREAD_UNCHANGED)
+
+    if scale_factor != 1.0:
+        width, height = semantic.size
+        newsize = (int(width * scale_factor), int(height * scale_factor))
+        semantic = semantic.resize(newsize, resample=Image.NEAREST)
+
+    # semantic = np.array(semantic)
+    # train_id_to_id = {}  # Initialize an empty dictionary
+    # for label in labels:
+    #     train_id = label.trainId
+    #     id = label.id
+    #     train_id_to_id[id] = train_id
+    # semantic[semantic > 33] = 0
+    # for id, train_id in train_id_to_id.items():
+    #     semantic[semantic == id] = train_id
+
+    semantic = torch.from_numpy(semantic)
+
+    return semantic
+
 
 def get_image_mask_tensor_from_path(filepath: Path, scale_factor: float = 1.0) -> torch.Tensor:
     """

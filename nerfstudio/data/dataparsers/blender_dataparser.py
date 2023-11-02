@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Type
+from typing import List, Literal, Optional, Type
 
 import imageio
 import numpy as np
@@ -47,6 +47,8 @@ class BlenderDataParserConfig(DataParserConfig):
     """alpha color of background"""
     load_3d_points: bool = False
     """Whether to load 3D points from the dataset."""
+    masks_path: Optional[Path] = None
+    """Path to mask file. If not None, will load mask from this file."""
 
 
 @dataclass
@@ -95,10 +97,17 @@ class Blender(DataParser):
         meta = load_from_json(self.data / f"transforms_{split}.json")
         image_filenames = []
         poses = []
+        mask_filenames = []
         for frame in meta["frames"]:
             fname = self.data / Path(frame["file_path"].replace("./", "") + ".png")
             image_filenames.append(fname)
             poses.append(np.array(frame["transform_matrix"]))
+            if self.config.masks_path is not None:
+                mask_filenames.append(
+                    self.config.masks_path / Path(frame["file_path"] + ".png")
+                )
+
+
         poses = np.array(poses).astype(np.float32)
 
         img_0 = imageio.v2.imread(image_filenames[0])
@@ -108,11 +117,11 @@ class Blender(DataParser):
         camera_angle_x = float(meta["camera_angle_x"])
         focal_length = 0.5 * image_width / np.tan(0.5 * camera_angle_x)
 
-        # cx = image_width / 2.0
-        # cy = image_height / 2.0
+        cx = image_width / 2.0
+        cy = image_height / 2.0
 
-        cx = (image_width - 1.0) / 2.0
-        cy = (image_height - 1.0) / 2.0
+        # cx = (image_width - 1.0) / 2.0
+        # cy = (image_height - 1.0) / 2.0
 
         camera_to_worlds = torch.from_numpy(poses)  # camera to world transform
         
@@ -145,9 +154,11 @@ class Blender(DataParser):
         if self.config.load_3d_points:
             meta_data.update(self._load_3D_points())
 
+
         dataparser_outputs = DataparserOutputs(
             image_filenames=image_filenames,
             cameras=cameras,
+            mask_filenames=mask_filenames if len(mask_filenames) > 0 else None,
             # alpha_color=alpha_color_tensor,
             # scene_box=scene_box,
             dataparser_scale=self.scale_factor,

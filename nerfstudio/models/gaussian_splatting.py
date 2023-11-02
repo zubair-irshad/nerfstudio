@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """
 NeRF implementation that combines many recent advancements.
 """
@@ -33,6 +32,7 @@ from gsplat.nd_rasterize import NDRasterizeGaussians
 from gsplat.project_gaussians import ProjectGaussians
 from gsplat.rasterize import RasterizeGaussians
 from gsplat.sh import SphericalHarmonics, num_sh_bases
+from imgviz import label_colormap
 from sklearn.neighbors import NearestNeighbors
 from torch.nn import Parameter
 from torchmetrics.image import (MultiScaleStructuralSimilarityIndexMeasure,
@@ -134,7 +134,7 @@ class GaussianSplattingModelConfig(ModelConfig):
     """stop splitting at this step"""
     sh_degree: int = 4
     """maximum degree of spherical harmonics to use"""
-    feature_size: int = 20 # for segmentation currently, could experiment with others in the future
+    feature_size: int = 29 # for segmentation currently, could experiment with others in the future
     """size of the feature vector"""
     features_lambda: float = 0.05
     """weight of feature loss"""
@@ -515,7 +515,7 @@ class GaussianSplattingModel(Model):
         if self.training:
             ## return 2 ** max((self.config.num_downscales - self.step // self.config.resolution_schedule), 0)
             return 1
-            return 1
+            # return 1
         else:
             return 1
 
@@ -679,6 +679,7 @@ class GaussianSplattingModel(Model):
 
         # rescale the camera back to original dimensions
         camera.rescale_output_resolution(camera_downscale)
+
         return {"rgb": rgb, "depth": depth_im, "feat_out": out_features}
 
     def get_metrics_dict(self, outputs, batch) -> Dict[str, torch.Tensor]:
@@ -700,6 +701,7 @@ class GaussianSplattingModel(Model):
         else:
             gt_img = batch["image"]
             gt_semantic = batch["mask"].long().to(self.device)
+
         metrics_dict = {}
         gt_rgb = gt_img.to(self.device)  # RGB or RGBA image
         # gt_rgb = self.renderer_rgb.blend_background(gt_rgb)  # Blend if RGBA
@@ -779,6 +781,7 @@ class GaussianSplattingModel(Model):
         else:
             gt_img = batch["image"]
             gt_seg = batch["mask"].long().to(self.device)
+
         Ll1 = torch.abs(gt_img - outputs["rgb"]).mean()
         simloss = 1 - self.ssim(gt_img.permute(2, 0, 1)[None, ...], outputs["rgb"].permute(2, 0, 1)[None, ...])
 
@@ -805,29 +808,45 @@ class GaussianSplattingModel(Model):
     def map_gt_semantic_to_color(self, logits):
 
         # print("logits shape", logits.shape)
-        id_to_color = {label.id: label.color for label in labels}
+        # id_to_color = {label.id: label.color for label in labels}
 
-        image = torch.zeros((logits.shape[0], logits.shape[1], 3), dtype=torch.float32, device="cuda")
-        for id, color in id_to_color.items():
-            normalized_color = [x / 255.0 for x in color]
-            image[logits == id] = torch.tensor(normalized_color, dtype=torch.float32, device="cuda")
+        # image = torch.zeros((logits.shape[0], logits.shape[1], 3), dtype=torch.float32, device="cuda")
+        # for id, color in id_to_color.items():
+        #     normalized_color = [x / 255.0 for x in color]
+        #     image[logits == id] = torch.tensor(normalized_color, dtype=torch.float32, device="cuda")
+
+        colour_map_np = label_colormap()[np.arange(0,self.config.feature_size)]
+        semantic_image = colour_map_np[logits]
+        semantic_image = semantic_image.astype(np.float32) / 255.0
+        semantic_image = torch.from_numpy(semantic_image).permute(2, 0, 1)
 
         # image = image.permute(2, 0, 1)
-        return image
+        return semantic_image
 
     def visualize_pred_semantic(self,logits):
         logits = torch.argmax(logits, dim=-1)
 
-        id_to_color = {label.id: label.color for label in labels}
-        image = torch.zeros((logits.shape[0], logits.shape[1], 3), dtype=torch.float32, device="cuda")
+        # id_to_color = {label.id: label.color for label in labels}
 
-        #color is a tuple RGB values convert them to integers 
-        for id, color in id_to_color.items():
-            normalized_color = [x / 255.0 for x in color]
-            image[logits == id] = torch.tensor(normalized_color, dtype=torch.float32, device="cuda")
+        # colour_map_np = label_colormap()[self.config.feature_size]
+
+        colour_map_np = label_colormap()[np.arange(0,self.config.feature_size)]
+
+        # image = torch.zeros((logits.shape[0], logits.shape[1], 3), dtype=torch.float32, device="cuda")
+
+        semantic_image = colour_map_np[logits]
+        semantic_image = semantic_image.astype(np.float32) / 255.0
+        semantic_image = torch.from_numpy(semantic_image).permute(2, 0, 1)
+
+
+
+        # #color is a tuple RGB values convert them to integers 
+        # for id, color in id_to_color.items():
+        #     normalized_color = [x / 255.0 for x in color]
+        #     image[logits == id] = torch.tensor(normalized_color, dtype=torch.float32, device="cuda")
         # image = image.permute(2, 0, 1)
         # print("image shape", image.shape)
-        return image
+        return semantic_image
 
     def get_image_metrics_and_images(
         self, outputs: Dict[str, torch.Tensor], batch: Dict[str, torch.Tensor]

@@ -32,7 +32,8 @@ from torch.utils.data import Dataset
 from nerfstudio.cameras.cameras import Cameras
 from nerfstudio.data.dataparsers.base_dataparser import DataparserOutputs
 from nerfstudio.data.utils.data_utils import (
-    get_image_mask_tensor_from_path, get_segmentation_tensor_from_path)
+    get_image_mask_tensor_from_path, get_segmentation_tensor_from_path,
+    get_segmentation_tensor_from_path_replica)
 
 
 class InputDataset(Dataset):
@@ -73,8 +74,6 @@ class InputDataset(Dataset):
             pil_image = pil_image.resize(newsize, resample=Image.BILINEAR)
 
         image = np.array(pil_image, dtype="uint8")  # shape is (h, w) or (h, w, 3 or 4)
-
-        print("image.shape", image.shape)
         if len(image.shape) == 2:
             image = image[:, :, None].repeat(3, axis=2)
         assert len(image.shape) == 3
@@ -110,7 +109,9 @@ class InputDataset(Dataset):
 
             mask_filepath = self._dataparser_outputs.mask_filenames[image_idx]
 
-            data["mask"] = get_segmentation_tensor_from_path(filepath=mask_filepath, scale_factor=self.scale_factor)
+            data["mask"] = get_segmentation_tensor_from_path_replica(filepath=mask_filepath, scale_factor=self.scale_factor)
+
+            # data["mask"] = get_segmentation_tensor_from_path(filepath=mask_filepath, scale_factor=self.scale_factor)
             #data["mask"] = get_image_mask_tensor_from_path(filepath=mask_filepath, scale_factor=self.scale_factor)
             # assert (
             #     data["mask"].shape[:2] == data["image"].shape[:2]
