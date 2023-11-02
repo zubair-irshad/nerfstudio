@@ -33,31 +33,22 @@ import mediapy as media
 import numpy as np
 import torch
 import tyro
+from imgviz import label_colormap
 from jaxtyping import Float
 from rich import box, style
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    Progress,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-    TimeRemainingColumn,
-)
+from rich.progress import (BarColumn, Progress, TaskProgressColumn, TextColumn,
+                           TimeElapsedColumn, TimeRemainingColumn)
 from rich.table import Table
 from torch import Tensor
 from typing_extensions import Annotated
 
-from nerfstudio.cameras.camera_paths import (
-    get_interpolated_camera_path,
-    get_path_from_json,
-    get_spiral_path,
-)
+from nerfstudio.cameras.camera_paths import (get_interpolated_camera_path,
+                                             get_path_from_json,
+                                             get_spiral_path)
 from nerfstudio.cameras.cameras import Cameras, CameraType, RayBundle
 from nerfstudio.data.datamanagers.base_datamanager import (
-    VanillaDataManager,
-    VanillaDataManagerConfig,
-)
+    VanillaDataManager, VanillaDataManagerConfig)
 from nerfstudio.data.datasets.base_dataset import Dataset
 from nerfstudio.data.scene_box import OrientedBox
 from nerfstudio.data.utils.dataloaders import FixedIndicesEvalDataloader
@@ -69,6 +60,14 @@ from nerfstudio.utils.eval_utils import eval_setup
 from nerfstudio.utils.rich_utils import CONSOLE, ItersPerSecColumn
 from nerfstudio.utils.scripts import run_command
 
+
+def visualize_pred_semantic(logits, feature_size = 29):
+    logits = torch.argmax(logits, dim=-1)
+    colour_map_np = label_colormap()[np.arange(0,feature_size)]
+    semantic_image = colour_map_np[logits.cpu().numpy()]
+    semantic_image = semantic_image.astype(np.float32) / 255.0
+    semantic_image = torch.from_numpy(semantic_image)
+    return semantic_image
 
 def _render_trajectory_video(
     pipeline: Pipeline,
@@ -163,6 +162,7 @@ def _render_trajectory_video(
                         sys.exit(1)
                     output_image = outputs[rendered_output_name]
                     is_depth = rendered_output_name.find("depth") != -1
+                    is_features = rendered_output_name.find("feat_out") != -1
                     if is_depth:
                         output_image = (
                             colormaps.apply_depth_colormap(
@@ -175,6 +175,9 @@ def _render_trajectory_video(
                             .cpu()
                             .numpy()
                         )
+                    elif is_features:
+                        output_image = (visualize_pred_semantic(output_image)).cpu().numpy()
+
                     else:
                         output_image = (
                             colormaps.apply_colormap(

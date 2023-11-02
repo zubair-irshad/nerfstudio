@@ -225,7 +225,7 @@ class GaussianSplattingModel(Model):
             torch.zeros(self.num_points, 3, num_sh_bases(self.config.sh_degree) - 1, device=self.device)
         )
         self.opacities = torch.nn.Parameter(torch.zeros(newp, 1, device=self.device))
-        self.features = torch.nn.Parameter(torch.zeros(newp, self.feature_size, 1, device=self.device))
+        self.features = torch.nn.Parameter(torch.zeros(newp, self.config.feature_size, 1, device=self.device))
         super().load_state_dict(dict, **kwargs)
 
     def k_nearest_sklearn(self, x: torch.Tensor, k: int):

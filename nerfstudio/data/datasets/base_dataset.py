@@ -88,8 +88,6 @@ class InputDataset(Dataset):
             image_idx: The image index in the dataset.
         """
         image = torch.from_numpy(self.get_numpy_image(image_idx).astype("float32") / 255.0)
-        print("image.shape", image.shape)
-        print("self._dataparser_outputs.alpha_color", self._dataparser_outputs.alpha_color)
         if self._dataparser_outputs.alpha_color is not None and image.shape[-1] == 4:
             image = image[:, :, :3] * image[:, :, -1:] + self._dataparser_outputs.alpha_color * (1.0 - image[:, :, -1:])
         return image
@@ -101,7 +99,6 @@ class InputDataset(Dataset):
             image_idx: The image index in the dataset.
         """
         image = self.get_image(image_idx)
-        print("image get data.shape", image.shape)
         data = {"image_idx": image_idx, "image": image}
         if self._dataparser_outputs.mask_filenames is not None:
 
