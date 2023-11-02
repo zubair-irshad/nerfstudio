@@ -865,7 +865,7 @@ class GaussianSplattingModel(Model):
         gt_rgb = batch["image"].to(self.device)
         predicted_rgb = outputs["rgb"]  # Blended with background (black if random background)
 
-        predicted_semantic = self.visualize_pred_semantic(outputs["feat_out"])
+        predicted_semantic = self.visualize_pred_semantic(outputs["feat_out"]).to(self.device)
         gt_semantic = self.map_gt_semantic_to_color(batch["mask"].long()).to(self.device)
         # Get the semantic visualization as well
         #combined_rgb = torch.cat([gt_rgb, predicted_rgb], dim=1)
