@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 import mediapy as media
 import numpy as np
 import torch
+import torch.nn.functional as F
 import tyro
 from imgviz import label_colormap
 from jaxtyping import Float
@@ -60,14 +61,31 @@ from nerfstudio.utils.eval_utils import eval_setup
 from nerfstudio.utils.rich_utils import CONSOLE, ItersPerSecColumn
 from nerfstudio.utils.scripts import run_command
 
+logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1),dim=-1)
+import matplotlib.pyplot as plt
+
 
 def visualize_pred_semantic(logits, feature_size = 29):
-    logits = torch.argmax(logits, dim=-1)
+    # logits = torch.argmax(logits, dim=-1)
+    logits =  torch.argmax(torch.nn.functional.softmax(logits, dim=-1),dim=-1)
     colour_map_np = label_colormap()[np.arange(0,feature_size)]
     semantic_image = colour_map_np[logits.cpu().numpy()]
     semantic_image = semantic_image.astype(np.float32) / 255.0
     semantic_image = torch.from_numpy(semantic_image)
     return semantic_image
+
+
+def visualize_pred_uncertainity(logits):
+    uncert = torch.sum(-F.log_softmax(logits, dim=-1)*F.softmax(logits, dim=-1), dim=-1, keepdim=True)
+    cmap = plt.get_cmap('viridis')
+    uncert = uncert.squeeze(-1)
+    norm = plt.Normalize(uncert.min(), uncert.max())
+    uncert = cmap(norm(uncert.cpu().numpy()))
+
+    uncert = torch.from_numpy(uncert[:, :, :3])
+    uncert = (255 * torch.clamp(uncert, 0, 1)).type(torch.uint8)
+    return uncert
+
 
 def _render_trajectory_video(
     pipeline: Pipeline,
@@ -176,6 +194,7 @@ def _render_trajectory_video(
                             .numpy()
                         )
                     elif is_features:
+                        # output_image = (visualize_pred_uncertainity(output_image)).cpu().numpy()
                         output_image = (visualize_pred_semantic(output_image)).cpu().numpy()
 
                     else:
