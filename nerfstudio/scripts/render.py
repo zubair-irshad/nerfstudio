@@ -147,6 +147,7 @@ def _render_trajectory_video(
                         )
                         end_time = time.time()
                         print("inference time: ", end_time - start_time)
+                        print("fps: ", 1/(end_time - start_time))
 
                 render_image = []
                 for rendered_output_name in rendered_output_names:
