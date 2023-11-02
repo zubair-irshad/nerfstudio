@@ -816,7 +816,7 @@ class GaussianSplattingModel(Model):
         #     image[logits == id] = torch.tensor(normalized_color, dtype=torch.float32, device="cuda")
 
         colour_map_np = label_colormap()[np.arange(0,self.config.feature_size)]
-        semantic_image = colour_map_np[logits]
+        semantic_image = colour_map_np[logits.cpu().numpy()]
         semantic_image = semantic_image.astype(np.float32) / 255.0
         semantic_image = torch.from_numpy(semantic_image).permute(2, 0, 1)
 
@@ -834,7 +834,7 @@ class GaussianSplattingModel(Model):
 
         # image = torch.zeros((logits.shape[0], logits.shape[1], 3), dtype=torch.float32, device="cuda")
 
-        semantic_image = colour_map_np[logits]
+        semantic_image = colour_map_np[logits.cpu().numpy()]
         semantic_image = semantic_image.astype(np.float32) / 255.0
         semantic_image = torch.from_numpy(semantic_image).permute(2, 0, 1)
 
