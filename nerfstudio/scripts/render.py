@@ -24,6 +24,7 @@ import os
 import shutil
 import struct
 import sys
+import time
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,28 +37,18 @@ import tyro
 from jaxtyping import Float
 from rich import box, style
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    Progress,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-    TimeRemainingColumn,
-)
+from rich.progress import (BarColumn, Progress, TaskProgressColumn, TextColumn,
+                           TimeElapsedColumn, TimeRemainingColumn)
 from rich.table import Table
 from torch import Tensor
 from typing_extensions import Annotated
 
-from nerfstudio.cameras.camera_paths import (
-    get_interpolated_camera_path,
-    get_path_from_json,
-    get_spiral_path,
-)
+from nerfstudio.cameras.camera_paths import (get_interpolated_camera_path,
+                                             get_path_from_json,
+                                             get_spiral_path)
 from nerfstudio.cameras.cameras import Cameras, CameraType, RayBundle
 from nerfstudio.data.datamanagers.base_datamanager import (
-    VanillaDataManager,
-    VanillaDataManagerConfig,
-)
+    VanillaDataManager, VanillaDataManagerConfig)
 from nerfstudio.data.datasets.base_dataset import Dataset
 from nerfstudio.data.scene_box import OrientedBox
 from nerfstudio.data.utils.dataloaders import FixedIndicesEvalDataloader
@@ -148,9 +139,14 @@ def _render_trajectory_video(
                         )
                 else:
                     with torch.no_grad():
+
+                        #measure time of inference
+                        start_time = time.time()
                         outputs = pipeline.model.get_outputs_for_camera_ray_bundle(
                             camera_ray_bundle, camera=cameras[camera_idx : camera_idx + 1]
                         )
+                        end_time = time.time()
+                        print("inference time: ", end_time - start_time)
 
                 render_image = []
                 for rendered_output_name in rendered_output_names:
