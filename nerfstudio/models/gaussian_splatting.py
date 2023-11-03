@@ -533,12 +533,17 @@ class GaussianSplattingModel(Model):
             start_channel = batch_idx * batch_size
             end_channel = min((batch_idx + 1) * batch_size, num_channels)
 
+            print("start_channel: ", start_channel)
+            print("end_channel: ", end_channel)
+
+
             # Select the relevant channels for the current batch
 
             if batch_idx == num_batches - 1:
                 #If we are on the last batch, we need to repeat the last channel to fill the batch
                 batch_features = features[:, start_channel:]
                 #fill the remaining channels with 0s
+                print("batch_features.shape: ", batch_features.shape)
                 batch_features = torch.cat((batch_features, torch.zeros(batch_features.shape[0], batch_size - batch_features.shape[1])), dim=1)
                 #batch_features = features[:, start_channel:]
 
@@ -546,6 +551,7 @@ class GaussianSplattingModel(Model):
                 batch_features = features[:, start_channel:end_channel]
             # batch_opacities = opacities_crop[:, start_channel:end_channel]
 
+            print("batch_features.shape: ", batch_features.shape)
             # Rasterize the selected channels
             out_feat_batch = RasterizeGaussians.apply(
                 input_xys,
@@ -559,6 +565,8 @@ class GaussianSplattingModel(Model):
                 W,
                 background,
             )
+
+            print("out_feat_batch.shape: ", out_feat_batch.shape)
 
             if batch_idx == num_batches - 1:
                 out_features[:, :, start_channel:] = out_feat_batch[:,:, :end_channel - start_channel]
