@@ -521,7 +521,7 @@ class GaussianSplattingModel(Model):
         
 
     def batched_rasterize_channels(self, input_xys, depths, radii, conics, num_tiles_hit, features, opacities_crop, H, W, background, batch_size=3):
-        _, num_channels = input_xys.shape[0], input_xys.shape[1]   # Adjust num_channels as needed
+        num_channels = features.shape[1]   # Adjust num_channels as needed
 
         # Calculate the number of batches
         num_batches = (num_channels + batch_size - 1) // batch_size
@@ -532,15 +532,6 @@ class GaussianSplattingModel(Model):
         for batch_idx in range(num_batches):
             start_channel = batch_idx * batch_size
             end_channel = min((batch_idx + 1) * batch_size, num_channels)
-
-            print("start_channel: ", start_channel)
-            print("end_channel: ", end_channel)
-
-
-            # Select the relevant channels for the current batch
-
-            print("batch_idx", batch_idx)
-            print("num_batches", num_batches)
 
             if batch_idx == num_batches - 1:
                 #If we are on the last batch, we need to repeat the last channel to fill the batch
