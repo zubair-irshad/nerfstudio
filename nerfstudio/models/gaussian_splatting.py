@@ -518,6 +518,55 @@ class GaussianSplattingModel(Model):
             # return 1
         else:
             return 1
+        
+
+    def batched_rasterize_channels(self, input_xys, depths, radii, conics, num_tiles_hit, features, opacities_crop, H, W, background, batch_size=3):
+        _, num_channels = input_xys.shape[0], input_xys.shape[1]   # Adjust num_channels as needed
+
+        # Calculate the number of batches
+        num_batches = (num_channels + batch_size - 1) // batch_size
+
+        # Initialize the output features tensor
+        out_features = torch.zeros(H, W, num_channels)
+
+        for batch_idx in range(num_batches):
+            start_channel = batch_idx * batch_size
+            end_channel = min((batch_idx + 1) * batch_size, num_channels)
+
+            # Select the relevant channels for the current batch
+
+            if batch_idx == num_batches - 1:
+                #If we are on the last batch, we need to repeat the last channel to fill the batch
+                batch_features = features[:, start_channel:]
+                #fill the remaining channels with 0s
+                batch_features = torch.cat((batch_features, torch.zeros(batch_features.shape[0], batch_size - batch_features.shape[1])), dim=1)
+                #batch_features = features[:, start_channel:]
+
+            else:
+                batch_features = features[:, start_channel:end_channel]
+            # batch_opacities = opacities_crop[:, start_channel:end_channel]
+
+            # Rasterize the selected channels
+            out_feat_batch = RasterizeGaussians.apply(
+                input_xys,
+                depths,
+                radii,
+                conics,
+                num_tiles_hit,
+                batch_features, 
+                torch.sigmoid(opacities_crop.detach()),
+                H,
+                W,
+                background,
+            )
+
+            if batch_idx == num_batches - 1:
+                out_features[:, :, start_channel:] = out_feat_batch[:,:, :end_channel - start_channel]
+            else:
+                # Assign the batched results to the output features tensor
+                out_features[:, :, start_channel:end_channel] = out_feat_batch
+
+        return out_features
 
     def get_outputs(self, camera: Cameras) -> Dict[str, Union[torch.Tensor, List]]:
         """Takes in a Ray Bundle and returns a dictionary of outputs.
@@ -654,17 +703,39 @@ class GaussianSplattingModel(Model):
         )[..., 0:1] 
         out_features = None
 
-        out_features = NDRasterizeGaussians.apply(
-            self.xys.detach(),
-            depths.detach(),
-            self.radii,
-            conics.detach(),
-            num_tiles_hit,
-            features_crop.squeeze(-1),
-            torch.sigmoid(opacities_crop.detach()),
-            H,
-            W,
-        )
+        #Try a batchified rasterization
+
+        xys_detached = self.xys.detach()
+        conics_detached = conics.detach()
+        opacities_crop_detached = torch.sigmoid(opacities_crop.detach())
+        depths_detached = depths.detach()
+        features_crop = features_crop.squeeze(-1)
+
+        out_features = self.batched_rasterize_channels(xys_detached, 
+                                                       depths_detached, 
+                                                       self.radii, 
+                                                       conics_detached, 
+                                                       num_tiles_hit, 
+                                                       features_crop, 
+                                                       opacities_crop_detached, 
+                                                       H, 
+                                                       W, 
+                                                       background, 
+                                                       batch_size=3)
+
+        # out_features = NDRasterizeGaussians.apply(
+        #     self.xys.detach(),
+        #     depths.detach(),
+        #     self.radii,
+        #     conics.detach(),
+        #     num_tiles_hit,
+        #     features_crop.squeeze(-1),
+        #     torch.sigmoid(opacities_crop.detach()),
+        #     H,
+        #     W,
+        # )
+
+        # Let's try raste
         # out_features = NDRasterizeGaussians.apply(
         #     self.xys,
         #     depths,
