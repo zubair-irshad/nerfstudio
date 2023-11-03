@@ -539,6 +539,9 @@ class GaussianSplattingModel(Model):
 
             # Select the relevant channels for the current batch
 
+            print("batch_idx", batch_idx)
+            print("num_batches", num_batches)
+
             if batch_idx == num_batches - 1:
                 #If we are on the last batch, we need to repeat the last channel to fill the batch
                 batch_features = features[:, start_channel:]
