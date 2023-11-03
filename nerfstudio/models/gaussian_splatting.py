@@ -538,7 +538,7 @@ class GaussianSplattingModel(Model):
                 batch_features = features[:, start_channel:]
                 #fill the remaining channels with 0s
                 print("batch_features.shape: ", batch_features.shape)
-                batch_features = torch.cat((batch_features, torch.zeros(batch_features.shape[0], batch_size - batch_features.shape[1])), dim=1)
+                batch_features = torch.cat((batch_features, torch.zeros((batch_features.shape[0], batch_size - batch_features.shape[1]), device = batch_features.device)), dim=1)
                 #batch_features = features[:, start_channel:]
 
             else:
