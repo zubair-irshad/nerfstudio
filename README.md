@@ -126,6 +126,20 @@ conda activate nerfstudio
 pip install --upgrade pip
 ```
 
+
+for LSeg install
+
+```
+pip install pytorch-lightning
+```
+
+```
+pip install torch-encoding@git+https://github.com/zhanghang1989/PyTorch-Encoding
+```
+
+```
+pip install clip@git+https://github.com/openai/CLIP.git
+```
 ### Dependencies
 
 Install PyTorch with CUDA (this repo has been tested with CUDA 11.7 and CUDA 11.8) and [tiny-cuda-nn](https://github.com/NVlabs/tiny-cuda-nn).
