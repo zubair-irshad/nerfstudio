@@ -724,11 +724,11 @@ class GaussianSplattingModel(Model):
 
         # Try a batchified rasterization
 
-        xys_detached = self.xys.detach()
-        conics_detached = conics.detach()
-        opacities_crop_detached = torch.sigmoid(opacities_crop.detach())
-        depths_detached = depths.detach()
-        features_crop = features_crop.squeeze(-1)
+        # xys_detached = self.xys.detach()
+        # conics_detached = conics.detach()
+        # opacities_crop_detached = torch.sigmoid(opacities_crop.detach())
+        # depths_detached = depths.detach()
+        # features_crop = features_crop.squeeze(-1)
 
         # out_features = self.batched_rasterize_channels(xys_detached,
         #                                                depths_detached,
