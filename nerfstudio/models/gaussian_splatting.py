@@ -35,24 +35,22 @@ from gsplat.sh import SphericalHarmonics, num_sh_bases
 from imgviz import label_colormap
 from sklearn.neighbors import NearestNeighbors
 from torch.nn import Parameter
-from torchmetrics.image import (MultiScaleStructuralSimilarityIndexMeasure,
-                                PeakSignalNoiseRatio,
-                                StructuralSimilarityIndexMeasure)
+from torchmetrics.image import (
+    MultiScaleStructuralSimilarityIndexMeasure,
+    PeakSignalNoiseRatio,
+    StructuralSimilarityIndexMeasure,
+)
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
-from nerfstudio.cameras.camera_optimizers import (CameraOptimizer,
-                                                  CameraOptimizerConfig)
+from nerfstudio.cameras.camera_optimizers import CameraOptimizer, CameraOptimizerConfig
 from nerfstudio.cameras.cameras import Cameras
 from nerfstudio.cameras.rays import RayBundle
 from nerfstudio.data.scene_box import OrientedBox
 from nerfstudio.data.utils.clip_utils import extract_clip_features, make_clip
 from nerfstudio.data.utils.labels import labels
-from nerfstudio.engine.callbacks import (TrainingCallback,
-                                         TrainingCallbackAttributes,
-                                         TrainingCallbackLocation)
+from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes, TrainingCallbackLocation
 from nerfstudio.engine.optimizers import Optimizers
-from nerfstudio.model_components.losses import (
-    depth_ranking_loss, scale_gauss_gradients_by_distance_squared)
+from nerfstudio.model_components.losses import depth_ranking_loss, scale_gauss_gradients_by_distance_squared
 from nerfstudio.models.base_model import Model, ModelConfig
 
 
@@ -554,22 +552,22 @@ class GaussianSplattingModel(Model):
             start_channel = batch_idx * batch_size
             end_channel = min((batch_idx + 1) * batch_size, num_channels)
 
-            if batch_idx == num_batches - 1:
-                batch_features = features[:, start_channel:]
-                batch_features = torch.cat(
-                    (
-                        batch_features,
-                        torch.zeros(
-                            (batch_features.shape[0], batch_size - batch_features.shape[1]),
-                            device=batch_features.device,
-                        ),
-                    ),
-                    dim=1,
-                )
+            # if batch_idx == num_batches - 1:
+            #     batch_features = features[:, start_channel:]
+            #     batch_features = torch.cat(
+            #         (
+            #             batch_features,
+            #             torch.zeros(
+            #                 (batch_features.shape[0], batch_size - batch_features.shape[1]),
+            #                 device=batch_features.device,
+            #             ),
+            #         ),
+            #         dim=1,
+            #     )
 
-            else:
-                batch_features = features[:, start_channel:end_channel]
-
+            # else:
+            #     batch_features = features[:, start_channel:end_channel]
+            batch_features = features[:, start_channel:end_channel]
             # Rasterize the selected channels
             out_feat_batch = RasterizeGaussians.apply(
                 input_xys,
@@ -583,11 +581,13 @@ class GaussianSplattingModel(Model):
                 W,
                 background,
             )
-            if batch_idx == num_batches - 1:
-                out_features[:, :, start_channel:] = out_feat_batch[:, :, : end_channel - start_channel]
-            else:
-                # Assign the batched results to the output features tensor
-                out_features[:, :, start_channel:end_channel] = out_feat_batch
+            # if batch_idx == num_batches - 1:
+            #     out_features[:, :, start_channel:] = out_feat_batch[:, :, : end_channel - start_channel]
+            # else:
+            #     # Assign the batched results to the output features tensor
+            #     out_features[:, :, start_channel:end_channel] = out_feat_batch
+
+            out_features[:, :, start_channel:end_channel] = out_feat_batch
 
         return out_features
 
@@ -726,35 +726,37 @@ class GaussianSplattingModel(Model):
 
         # Try a batchified rasterization
 
-        # xys_detached = self.xys.detach()
-        # conics_detached = conics.detach()
-        # opacities_crop_detached = torch.sigmoid(opacities_crop.detach())
-        # depths_detached = depths.detach()
-        # features_crop = features_crop.squeeze(-1)
+        xys_detached = self.xys.detach()
+        conics_detached = conics.detach()
+        opacities_crop_detached = torch.sigmoid(opacities_crop.detach())
+        depths_detached = depths.detach()
+        features_crop = features_crop.squeeze(-1)
 
-        # out_features = self.batched_rasterize_channels(xys_detached,
-        #                                                depths_detached,
-        #                                                self.radii,
-        #                                                conics_detached,
-        #                                                num_tiles_hit,
-        #                                                features_crop,
-        #                                                opacities_crop_detached,
-        #                                                H,
-        #                                                W,
-        #                                                background,
-        #                                                batch_size=3)
-
-        out_features = NDRasterizeGaussians.apply(
-            self.xys.detach(),
-            depths.detach(),
+        out_features = self.batched_rasterize_channels(
+            xys_detached,
+            depths_detached,
             self.radii,
-            conics.detach(),
+            conics_detached,
             num_tiles_hit,
-            features_crop.squeeze(-1),
-            torch.sigmoid(opacities_crop.detach()),
+            features_crop,
+            opacities_crop_detached,
             H,
             W,
+            background,
+            batch_size=32,
         )
+
+        # out_features = NDRasterizeGaussians.apply(
+        #     self.xys.detach(),
+        #     depths.detach(),
+        #     self.radii,
+        #     conics.detach(),
+        #     num_tiles_hit,
+        #     features_crop.squeeze(-1),
+        #     torch.sigmoid(opacities_crop.detach()),
+        #     H,
+        #     W,
+        # )
 
         # Let's try raste
         # out_features = NDRasterizeGaussians.apply(
