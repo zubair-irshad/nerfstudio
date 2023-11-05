@@ -135,7 +135,7 @@ class GaussianSplattingModelConfig(ModelConfig):
     """maximum degree of spherical harmonics to use"""
     feature_size: int = 29  # for segmentation currently, could experiment with others in the future
     """size of the feature vector"""
-    features_lambda: float = 0.05
+    features_lambda: float = 0.5
     """weight of feature loss"""
     camera_optimizer: CameraOptimizerConfig = CameraOptimizerConfig(mode="off")
     """camera optimizer config"""
