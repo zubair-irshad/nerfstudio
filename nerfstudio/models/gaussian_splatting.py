@@ -889,12 +889,6 @@ class GaussianSplattingModel(Model):
             elif torch.isnan(gt_features).any():
                 print("gt features are nan")
 
-            # check if features are close to 0
-            if torch.isclose(outputs["feat_out"], 0).any():
-                print("features are close to 0")
-            elif torch.isclose(gt_features, 0).any():
-                print("gt features are close to 0")
-
             semantic_loss = (1 - torch.nn.CosineSimilarity(eps=1e-3)(outputs["feat_out"], gt_features)).mean()
             # semantic_loss = torch.nn.L1Loss()(outputs["feat_out"], gt_features)
         return {
