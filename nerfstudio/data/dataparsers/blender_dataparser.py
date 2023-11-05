@@ -105,7 +105,14 @@ class Blender(DataParser):
                 mask_filenames.append(self.config.masks_path / Path(frame["file_path"] + ".png"))
 
             if self.config.features_path is not None:
-                features_filenames.append(self.config.features_path / Path(frame["file_path"] + ".npy.npz"))
+                # Path(frame["file_path"]) looks like images/rgb_0
+                # but I want to only use rgb_0
+                # so I split on the / and take the last element
+                features_filenames.append(
+                    self.config.features_path / Path(frame["file_path"].split("/")[-1] + ".npy.npz")
+                )
+
+                # features_filenames.append(self.config.features_path / Path(frame["file_path"] + ".npy.npz"))
 
         poses = np.array(poses).astype(np.float32)
 
