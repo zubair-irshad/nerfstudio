@@ -1,6 +1,5 @@
 import clip
-
-from LSeg.modules.models.lseg_vit import _make_pretrained_clip_vitl16_384
+from modules.models.lseg_vit import _make_pretrained_clip_vitl16_384
 
 
 def make_clip():
