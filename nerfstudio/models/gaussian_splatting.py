@@ -895,8 +895,8 @@ class GaussianSplattingModel(Model):
             elif torch.isnan(gt_features).any():
                 print("gt features are nan")
 
-            # semantic_loss = (1 - torch.nn.CosineSimilarity(eps=1e-3)(outputs["feat_out"], gt_features)).mean()
-            semantic_loss = torch.nn.L1Loss()(outputs["feat_out"], gt_features)
+            semantic_loss = (1 - torch.nn.CosineSimilarity(eps=1e-3)(outputs["feat_out"], gt_features)).mean()
+            # semantic_loss = torch.nn.L1Loss()(outputs["feat_out"], gt_features)
         return {
             "rgb_loss": (1 - self.config.ssim_lambda) * Ll1,
             "ssim_loss": self.config.ssim_lambda * simloss,
