@@ -26,8 +26,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import (Dict, ForwardRef, Generic, List, Literal, Optional, Tuple,
-                    Type, Union, cast, get_args, get_origin)
+from typing import Dict, ForwardRef, Generic, List, Literal, Optional, Tuple, Type, Union, cast, get_args, get_origin
 
 import cv2
 import numpy as np
@@ -37,13 +36,11 @@ from tqdm import tqdm
 
 from nerfstudio.cameras.cameras import Cameras, CameraType
 from nerfstudio.configs.dataparser_configs import AnnotatedDataParserUnion
-from nerfstudio.data.datamanagers.base_datamanager import (DataManager,
-                                                           DataManagerConfig,
-                                                           TDataset)
+from nerfstudio.data.datamanagers.base_datamanager import DataManager, DataManagerConfig, TDataset
 from nerfstudio.data.dataparsers.base_dataparser import DataparserOutputs
-from nerfstudio.data.dataparsers.nerfstudio_dataparser import \
-    NerfstudioDataParserConfig
+from nerfstudio.data.dataparsers.nerfstudio_dataparser import NerfstudioDataParserConfig
 from nerfstudio.data.datasets.base_dataset import InputDataset
+
 # from nerfstudio.data.utils.dataloaders import FixedIndicesEvalDataloader
 from nerfstudio.utils.misc import get_orig_class
 from nerfstudio.utils.rich_utils import CONSOLE
@@ -129,23 +126,26 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
         for i in tqdm(range(len(self.train_dataset)), leave=False):
             # cv2.undistort the images / cameras
 
-            #Only do undistortion if the camera has distortion parameters
-
+            # Only do undistortion if the camera has distortion parameters
 
             data = self.train_dataset.get_data(i)
             camera = self.train_dataset.cameras[i].reshape(())
             K = camera.get_intrinsics_matrices().numpy()
-            
+
             if camera.distortion_params is None:
-                #If there are no distortion parameters, then skip undistortion
+                # If there are no distortion parameters, then skip undistortion
                 image = data["image"].numpy()
                 data["image"] = torch.from_numpy(image)
                 if "mask" in data:
                     mask = data["mask"].numpy()
+                    data["mask"] = torch.from_numpy(mask)
+                if "image_features" in data:
+                    image_features = data["image_features"].numpy()
+                    data["image_features"] = torch.from_numpy(image_features)
                 cached_train.append(data)
 
             else:
-                #If there are distortion parameters, then undistort the image
+                # If there are distortion parameters, then undistort the image
                 distortion_params = camera.distortion_params.numpy()
                 image = data["image"].numpy()
 
@@ -167,10 +167,10 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
                     # crop the image and update the intrinsics accordingly
                     x, y, w, h = roi
                     image = image[y : y + h, x : x + w]
-                    if 'mask' in data:
-                        data['mask'] = data['mask'][y : y + h, x : x + w]
-                    if 'depth_image' in data:
-                        data['depth_image'] = data['depth_image'][y : y + h, x : x + w]
+                    if "mask" in data:
+                        data["mask"] = data["mask"][y : y + h, x : x + w]
+                    if "depth_image" in data:
+                        data["depth_image"] = data["depth_image"][y : y + h, x : x + w]
                     K = newK
                     # update the width, height
                     self.train_dataset.cameras.width[i] = w
@@ -213,10 +213,10 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
         cached_eval = []
         CONSOLE.log("Caching / undistorting eval images")
 
-        #Only do undistortion if the camera has distortion parameters
+        # Only do undistortion if the camera has distortion parameters
 
         if camera.distortion_params is None:
-            #If there are no distortion parameters, then skip undistortion
+            # If there are no distortion parameters, then skip undistortion
             for i in tqdm(range(len(self.eval_dataset)), leave=False):
                 data = self.eval_dataset.get_data(i)
                 image = data["image"].numpy()
@@ -224,6 +224,10 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
                 cached_eval.append(data)
                 if "mask" in data:
                     mask = data["mask"].numpy()
+                    data["mask"] = torch.from_numpy(mask)
+                if "image_features" in data:
+                    image_features = data["image_features"].numpy()
+                    data["image_features"] = torch.from_numpy(image_features)
 
         else:
             for i in tqdm(range(len(self.eval_dataset)), leave=False):
@@ -349,7 +353,7 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
 
     def setup_eval(self):
         """Sets up the data loader for evaluation"""
-    
+
     def get_param_groups(self) -> Dict[str, List[Parameter]]:
         """Get the param groups for the data manager.
         Returns:
@@ -407,5 +411,5 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
         data = deepcopy(self.cached_eval[image_idx])
         data["image"] = data["image"].to(self.device)
         assert len(self.eval_dataset.cameras.shape) == 1, "Assumes single batch dimension"
-        camera = self.eval_dataset.cameras[image_idx: image_idx + 1].to(self.device)
+        camera = self.eval_dataset.cameras[image_idx : image_idx + 1].to(self.device)
         return image_idx, camera, data

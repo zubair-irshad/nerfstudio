@@ -25,9 +25,7 @@ import torch
 
 from nerfstudio.cameras import camera_utils
 from nerfstudio.cameras.cameras import Cameras, CameraType
-from nerfstudio.data.dataparsers.base_dataparser import (DataParser,
-                                                         DataParserConfig,
-                                                         DataparserOutputs)
+from nerfstudio.data.dataparsers.base_dataparser import DataParser, DataParserConfig, DataparserOutputs
 from nerfstudio.data.scene_box import SceneBox
 from nerfstudio.utils.colors import get_color
 from nerfstudio.utils.io import load_from_json
@@ -49,6 +47,8 @@ class BlenderDataParserConfig(DataParserConfig):
     """Whether to load 3D points from the dataset."""
     masks_path: Optional[Path] = None
     """Path to mask file. If not None, will load mask from this file."""
+    features_path: Optional[Path] = None
+    """Path to features file. If not None, will load features from this file."""
 
 
 @dataclass
@@ -64,7 +64,6 @@ class Blender(DataParser):
         self.data: Path = config.data
         self.scale_factor: float = config.scale_factor
         self.alpha_color = config.alpha_color
-
 
     def _load_3D_points(self):
         num_pts = 1000000
@@ -87,7 +86,6 @@ class Blender(DataParser):
         }
         return out
 
-
     def _generate_dataparser_outputs(self, split="train"):
         if self.alpha_color is not None:
             alpha_color_tensor = get_color(self.alpha_color)
@@ -98,15 +96,16 @@ class Blender(DataParser):
         image_filenames = []
         poses = []
         mask_filenames = []
+        features_filenames = []
         for frame in meta["frames"]:
             fname = self.data / Path(frame["file_path"].replace("./", "") + ".png")
             image_filenames.append(fname)
             poses.append(np.array(frame["transform_matrix"]))
             if self.config.masks_path is not None:
-                mask_filenames.append(
-                    self.config.masks_path / Path(frame["file_path"] + ".png")
-                )
+                mask_filenames.append(self.config.masks_path / Path(frame["file_path"] + ".png"))
 
+            if self.config.features_path is not None:
+                features_filenames.append(self.config.features_path / Path(frame["file_path"] + ".npy.npz"))
 
         poses = np.array(poses).astype(np.float32)
 
@@ -124,7 +123,7 @@ class Blender(DataParser):
         # cy = (image_height - 1.0) / 2.0
 
         camera_to_worlds = torch.from_numpy(poses)  # camera to world transform
-        
+
         camera_to_worlds, transform = camera_utils.auto_orient_and_center_poses(
             camera_to_worlds,
             method="up",
@@ -132,8 +131,6 @@ class Blender(DataParser):
         )
 
         # camera_to_world = torch.from_numpy(poses[:, :3])  # camera to world transform
-
-
 
         # in x,y,z order
         # camera_to_world[..., 3] *= self.scale_factor
@@ -150,15 +147,15 @@ class Blender(DataParser):
         )
 
         meta_data = {}
-            # Load 3D points
+        # Load 3D points
         if self.config.load_3d_points:
             meta_data.update(self._load_3D_points())
-
 
         dataparser_outputs = DataparserOutputs(
             image_filenames=image_filenames,
             cameras=cameras,
             mask_filenames=mask_filenames if len(mask_filenames) > 0 else None,
+            features_filenames=features_filenames if len(features_filenames) > 0 else None,
             # alpha_color=alpha_color_tensor,
             # scene_box=scene_box,
             dataparser_scale=self.scale_factor,

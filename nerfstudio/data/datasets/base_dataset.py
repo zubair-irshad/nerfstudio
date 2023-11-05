@@ -32,8 +32,10 @@ from torch.utils.data import Dataset
 from nerfstudio.cameras.cameras import Cameras
 from nerfstudio.data.dataparsers.base_dataparser import DataparserOutputs
 from nerfstudio.data.utils.data_utils import (
-    get_image_mask_tensor_from_path, get_segmentation_tensor_from_path,
-    get_segmentation_tensor_from_path_replica)
+    get_image_mask_tensor_from_path,
+    get_segmentation_tensor_from_path,
+    get_segmentation_tensor_from_path_replica,
+)
 
 
 class InputDataset(Dataset):
@@ -101,21 +103,27 @@ class InputDataset(Dataset):
         image = self.get_image(image_idx)
         data = {"image_idx": image_idx, "image": image}
         if self._dataparser_outputs.mask_filenames is not None:
-
             # A different logic would probably break training object-centric models but here we are using masks as segmentation ground truth
 
             mask_filepath = self._dataparser_outputs.mask_filenames[image_idx]
 
-            data["mask"] = get_segmentation_tensor_from_path_replica(filepath=mask_filepath, scale_factor=self.scale_factor)
+            data["mask"] = get_segmentation_tensor_from_path_replica(
+                filepath=mask_filepath, scale_factor=self.scale_factor
+            )
 
             # data["mask"] = get_segmentation_tensor_from_path(filepath=mask_filepath, scale_factor=self.scale_factor)
-            #data["mask"] = get_image_mask_tensor_from_path(filepath=mask_filepath, scale_factor=self.scale_factor)
+            # data["mask"] = get_image_mask_tensor_from_path(filepath=mask_filepath, scale_factor=self.scale_factor)
             # assert (
             #     data["mask"].shape[:2] == data["image"].shape[:2]
             # ), f"Mask and image have different shapes. Got {data['mask'].shape[:2]} and {data['image'].shape[:2]}"
             assert (
                 data["mask"].shape[:2] == data["image"].shape[:2]
             ), f"Mask and image have different shapes. Got {data['mask'].shape[:2]} and {data['image'].shape[:2]}"
+
+        if self._dataparser_outputs.features_filenames is not None:
+            features_filepath = self._dataparser_outputs.features_filenames[image_idx]
+            features = np.load(features_filepath)["arr_0"].astype(np.float16).transpose(1, 2, 0)
+            data["features"] = torch.from_numpy(features)
         metadata = self.get_metadata(data)
         data.update(metadata)
         return data
