@@ -881,9 +881,8 @@ class GaussianSplattingModel(Model):
             # could try L1 loss here as well as mentoned in the following:
             # https://github.com/evelinehong/3D-CLR-Official/blob/main/DVGO_feature/run.py#L385
             # https://github.com/pengsongyou/openscene/blob/0f369bc73d0724ae24b5e46bbada193f8ee9d193/run/distill.py#L324-L328
-
-            print("gt_features shape", gt_features.shape)
-            semantic_loss = (1 - torch.nn.CosineSimilarity()(outputs["feat_out"], gt_features)).mean()
+            # semantic_loss = (1 - torch.nn.CosineSimilarity()(outputs["feat_out"], gt_features)).mean()
+            semantic_loss = torch.nn.L1Loss()(outputs["feat_out"], gt_features)
         return {
             "main_loss": (1 - self.config.ssim_lambda) * Ll1
             + self.config.ssim_lambda * simloss
