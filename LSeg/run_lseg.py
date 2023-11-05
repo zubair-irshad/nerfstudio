@@ -271,7 +271,7 @@ out_img_feat_dir = "/data/zubair/replica/room_0/img_feat"
 
 import os
 
-os.makedirs(out_img_feat_dir, exists_ok=True)
+os.makedirs(out_img_feat_dir, exist_ok=True)
 
 # img_root = imgdir + '/' + args.room_name
 # img_paths = [os.path.join(img_root, path) for path in os.listdir(img_root) if '.png' in path]
