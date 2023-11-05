@@ -35,24 +35,22 @@ from gsplat.sh import SphericalHarmonics, num_sh_bases
 from imgviz import label_colormap
 from sklearn.neighbors import NearestNeighbors
 from torch.nn import Parameter
-from torchmetrics.image import (MultiScaleStructuralSimilarityIndexMeasure,
-                                PeakSignalNoiseRatio,
-                                StructuralSimilarityIndexMeasure)
+from torchmetrics.image import (
+    MultiScaleStructuralSimilarityIndexMeasure,
+    PeakSignalNoiseRatio,
+    StructuralSimilarityIndexMeasure,
+)
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
-from nerfstudio.cameras.camera_optimizers import (CameraOptimizer,
-                                                  CameraOptimizerConfig)
+from nerfstudio.cameras.camera_optimizers import CameraOptimizer, CameraOptimizerConfig
 from nerfstudio.cameras.cameras import Cameras
 from nerfstudio.cameras.rays import RayBundle
 from nerfstudio.data.scene_box import OrientedBox
 from nerfstudio.data.utils.clip_utils import extract_clip_features, make_clip
 from nerfstudio.data.utils.labels import labels
-from nerfstudio.engine.callbacks import (TrainingCallback,
-                                         TrainingCallbackAttributes,
-                                         TrainingCallbackLocation)
+from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes, TrainingCallbackLocation
 from nerfstudio.engine.optimizers import Optimizers
-from nerfstudio.model_components.losses import (
-    depth_ranking_loss, scale_gauss_gradients_by_distance_squared)
+from nerfstudio.model_components.losses import depth_ranking_loss, scale_gauss_gradients_by_distance_squared
 from nerfstudio.models.base_model import Model, ModelConfig
 
 
@@ -883,7 +881,21 @@ class GaussianSplattingModel(Model):
             # could try L1 loss here as well as mentoned in the following:
             # https://github.com/evelinehong/3D-CLR-Official/blob/main/DVGO_feature/run.py#L385
             # https://github.com/pengsongyou/openscene/blob/0f369bc73d0724ae24b5e46bbada193f8ee9d193/run/distill.py#L324-L328
-            semantic_loss = (1 - torch.nn.CosineSimilarity()(outputs["feat_out"], gt_features)).mean()
+
+            # check if the features or input are not nan
+
+            if torch.isnan(outputs["feat_out"]).any():
+                print("features are nan")
+            elif torch.isnan(gt_features).any():
+                print("gt features are nan")
+
+            # check if features are close to 0
+            if torch.isclose(outputs["feat_out"], 0).any():
+                print("features are close to 0")
+            elif torch.isclose(gt_features, 0).any():
+                print("gt features are close to 0")
+
+            semantic_loss = (1 - torch.nn.CosineSimilarity(eps=1e-3)(outputs["feat_out"], gt_features)).mean()
             # semantic_loss = torch.nn.L1Loss()(outputs["feat_out"], gt_features)
         return {
             "rgb_loss": (1 - self.config.ssim_lambda) * Ll1,
