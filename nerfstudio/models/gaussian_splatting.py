@@ -792,7 +792,8 @@ class GaussianSplattingModel(Model):
             gt_semantic = gt_semantic.squeeze(0).squeeze(0).long().to(self.device)
         else:
             gt_img = batch["image"]
-            gt_semantic = batch["mask"].long().to(self.device)
+            if self.config.distill_type == "overfit":
+                gt_semantic = batch["mask"].long().to(self.device)
 
         metrics_dict = {}
         gt_rgb = gt_img.to(self.device)  # RGB or RGBA image
@@ -802,21 +803,12 @@ class GaussianSplattingModel(Model):
 
         # get semantic segmentation metrics
 
-        predicted_semantic = outputs["feat_out"]
-        predicted_semantic = predicted_semantic.argmax(dim=-1)
-        predicted_semantic = predicted_semantic.long()
-
-        # print("gt semantic shape", gt_semantic.shape)
-        # print("predicted semantic shape", predicted_semantic.shape)
-        # print("predicted semantic shape", predicted_semantic.shape)
-        # print("gt semantic shape", gt_semantic.shape)
-        # print("predicted semantic dtype", predicted_semantic.dtype)
-        # print("gt semantic dtype", gt_semantic.dtype)
-
-        # just output the predicted semantic segmentation metrics
-
-        metrics_dict["semantic_acc"] = self.semantic_acc(predicted_semantic, gt_semantic)
-        metrics_dict["semantic_iou"] = self.semantic_iou(predicted_semantic, gt_semantic)
+        if self.config.distill_type == "overfit":
+            predicted_semantic = outputs["feat_out"]
+            predicted_semantic = predicted_semantic.argmax(dim=-1)
+            predicted_semantic = predicted_semantic.long()
+            metrics_dict["semantic_acc"] = self.semantic_acc(predicted_semantic, gt_semantic)
+            metrics_dict["semantic_iou"] = self.semantic_iou(predicted_semantic, gt_semantic)
 
         self.camera_optimizer.get_metrics_dict(metrics_dict)
         metrics_dict["gaussian_count"] = self.num_points
