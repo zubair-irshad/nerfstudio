@@ -552,22 +552,22 @@ class GaussianSplattingModel(Model):
             start_channel = batch_idx * batch_size
             end_channel = min((batch_idx + 1) * batch_size, num_channels)
 
-            # if batch_idx == num_batches - 1:
-            #     batch_features = features[:, start_channel:]
-            #     batch_features = torch.cat(
-            #         (
-            #             batch_features,
-            #             torch.zeros(
-            #                 (batch_features.shape[0], batch_size - batch_features.shape[1]),
-            #                 device=batch_features.device,
-            #             ),
-            #         ),
-            #         dim=1,
-            #     )
+            if batch_idx == num_batches - 1:
+                batch_features = features[:, start_channel:]
+                batch_features = torch.cat(
+                    (
+                        batch_features,
+                        torch.zeros(
+                            (batch_features.shape[0], batch_size - batch_features.shape[1]),
+                            device=batch_features.device,
+                        ),
+                    ),
+                    dim=1,
+                )
 
-            # else:
-            #     batch_features = features[:, start_channel:end_channel]
-            batch_features = features[:, start_channel:end_channel]
+            else:
+                batch_features = features[:, start_channel:end_channel]
+            # batch_features = features[:, start_channel:end_channel]
             # Rasterize the selected channels
             out_feat_batch = RasterizeGaussians.apply(
                 input_xys,
@@ -581,13 +581,13 @@ class GaussianSplattingModel(Model):
                 W,
                 background,
             )
-            # if batch_idx == num_batches - 1:
-            #     out_features[:, :, start_channel:] = out_feat_batch[:, :, : end_channel - start_channel]
-            # else:
-            #     # Assign the batched results to the output features tensor
-            #     out_features[:, :, start_channel:end_channel] = out_feat_batch
+            if batch_idx == num_batches - 1:
+                out_features[:, :, start_channel:] = out_feat_batch[:, :, : end_channel - start_channel]
+            else:
+                # Assign the batched results to the output features tensor
+                out_features[:, :, start_channel:end_channel] = out_feat_batch
 
-            out_features[:, :, start_channel:end_channel] = out_feat_batch
+            # out_features[:, :, start_channel:end_channel] = out_feat_batch
 
         return out_features
 
@@ -745,7 +745,7 @@ class GaussianSplattingModel(Model):
             H,
             W,
             background_feat,
-            batch_size=32,
+            batch_size=3,
         )
 
         # out_features = NDRasterizeGaussians.apply(
