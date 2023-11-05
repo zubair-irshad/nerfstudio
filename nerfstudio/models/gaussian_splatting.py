@@ -35,22 +35,24 @@ from gsplat.sh import SphericalHarmonics, num_sh_bases
 from imgviz import label_colormap
 from sklearn.neighbors import NearestNeighbors
 from torch.nn import Parameter
-from torchmetrics.image import (
-    MultiScaleStructuralSimilarityIndexMeasure,
-    PeakSignalNoiseRatio,
-    StructuralSimilarityIndexMeasure,
-)
+from torchmetrics.image import (MultiScaleStructuralSimilarityIndexMeasure,
+                                PeakSignalNoiseRatio,
+                                StructuralSimilarityIndexMeasure)
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
-from nerfstudio.cameras.camera_optimizers import CameraOptimizer, CameraOptimizerConfig
+from nerfstudio.cameras.camera_optimizers import (CameraOptimizer,
+                                                  CameraOptimizerConfig)
 from nerfstudio.cameras.cameras import Cameras
 from nerfstudio.cameras.rays import RayBundle
 from nerfstudio.data.scene_box import OrientedBox
 from nerfstudio.data.utils.clip_utils import extract_clip_features, make_clip
 from nerfstudio.data.utils.labels import labels
-from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes, TrainingCallbackLocation
+from nerfstudio.engine.callbacks import (TrainingCallback,
+                                         TrainingCallbackAttributes,
+                                         TrainingCallbackLocation)
 from nerfstudio.engine.optimizers import Optimizers
-from nerfstudio.model_components.losses import depth_ranking_loss, scale_gauss_gradients_by_distance_squared
+from nerfstudio.model_components.losses import (
+    depth_ranking_loss, scale_gauss_gradients_by_distance_squared)
 from nerfstudio.models.base_model import Model, ModelConfig
 
 
@@ -889,8 +891,8 @@ class GaussianSplattingModel(Model):
             elif torch.isnan(gt_features).any():
                 print("gt features are nan")
 
-            semantic_loss = (1 - torch.nn.CosineSimilarity(eps=1e-3)(outputs["feat_out"], gt_features)).mean()
-            # semantic_loss = torch.nn.L1Loss()(outputs["feat_out"], gt_features)
+            # semantic_loss = (1 - torch.nn.CosineSimilarity(eps=1e-3)(outputs["feat_out"], gt_features)).mean()
+            semantic_loss = torch.nn.L1Loss()(outputs["feat_out"], gt_features)
         return {
             "rgb_loss": (1 - self.config.ssim_lambda) * Ll1,
             "ssim_loss": self.config.ssim_lambda * simloss,
