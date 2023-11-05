@@ -284,10 +284,13 @@ img_paths = os.listdir(imgdir)
 train_ids = list(range(0, len(img_paths), 5))
 test_ids = [x + 2 for x in train_ids]
 
+print("train_ids", train_ids)
+print("test_ids", test_ids)
 for k, img_name in enumerate(tqdm(img_paths)):
+    print(k, img_name)
+
     if k not in test_ids or k not in train_ids:
         continue
-    print(k, img_name)
     img_path = os.path.join(imgdir, img_name)
     pil_img = Image.open(img_path)
     image = np.array(pil_img)[..., :3]
