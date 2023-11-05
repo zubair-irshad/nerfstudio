@@ -644,8 +644,10 @@ class GaussianSplattingModel(Model):
         )
         if self.training:
             background = torch.rand(3, device=self.device)
+            background_feat = torch.rand(32, device=self.device)
         else:
             background = self.back_color
+            background_feat = torch.zeros(32, device=self.device)
 
         if crop_ids is not None:
             opacities_crop = self.opacities[crop_ids]
@@ -742,7 +744,7 @@ class GaussianSplattingModel(Model):
             opacities_crop_detached,
             H,
             W,
-            background,
+            background_feat,
             batch_size=32,
         )
 
