@@ -1,5 +1,6 @@
 import clip
-from modules.models.lseg_vit import _make_pretrained_clip_vitl16_384
+
+from nerfstudio.lseg.modules.models.lseg_vit import _make_pretrained_clip_vitl16_384
 
 
 def make_clip():
