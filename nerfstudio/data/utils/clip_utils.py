@@ -1,4 +1,5 @@
 import clip
+import torch
 
 from nerfstudio.lseg.modules.models.lseg_vit import _make_pretrained_clip_vitl16_384
 
@@ -37,5 +38,7 @@ def extract_clip_features(clip_pretrained, label_src):
     text = text.cuda()
     text_features = clip_pretrained.encode_text(text)
     text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+
+    text_features = text_features.to(torch.float32)
 
     return text_features
