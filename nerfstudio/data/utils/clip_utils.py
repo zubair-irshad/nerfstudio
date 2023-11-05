@@ -36,5 +36,6 @@ def extract_clip_features(clip_pretrained, label_src):
     text = clip.tokenize(labels)
     text = text.cuda()
     text_features = clip_pretrained.encode_text(text)
+    text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
     return text_features

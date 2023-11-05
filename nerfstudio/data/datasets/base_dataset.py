@@ -123,6 +123,8 @@ class InputDataset(Dataset):
         if self._dataparser_outputs.features_filenames is not None:
             features_filepath = self._dataparser_outputs.features_filenames[image_idx]
             features = np.load(features_filepath)["arr_0"].astype(np.float16).transpose(1, 2, 0)
+
+            features = features / features.norm(dim=-1, keepdim=True)
             data["image_features"] = torch.from_numpy(features)
         metadata = self.get_metadata(data)
         data.update(metadata)
