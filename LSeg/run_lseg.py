@@ -286,11 +286,20 @@ test_ids = [x + 2 for x in train_ids]
 
 print("train_ids", train_ids)
 print("test_ids", test_ids)
-for k, img_name in enumerate(tqdm(img_paths)):
-    print(k, img_name)
 
-    if k not in test_ids or k not in train_ids:
+# rgb_path is rgb_0, rgb_1
+for k, img_name in enumerate(tqdm(img_paths)):
+    # print(k, img_name)
+
+    # I want to check if the number associated with image_name is in train or test ids
+
+    num = int(img_name.split("_")[1].split(".")[0])
+
+    if num not in train_ids and num not in test_ids:
         continue
+
+    # if k not in test_ids or k not in train_ids:
+    #     continue
     img_path = os.path.join(imgdir, img_name)
     pil_img = Image.open(img_path)
     image = np.array(pil_img)[..., :3]
