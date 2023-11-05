@@ -136,12 +136,12 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
                 # If there are no distortion parameters, then skip undistortion
                 image = data["image"].numpy()
                 data["image"] = torch.from_numpy(image)
-                if "mask" in data:
-                    mask = data["mask"].numpy()
-                    data["mask"] = torch.from_numpy(mask)
-                if "image_features" in data:
-                    image_features = data["image_features"].numpy()
-                    data["image_features"] = torch.from_numpy(image_features)
+                # if "mask" in data:
+                #     mask = data["mask"].numpy()
+                #     data["mask"] = torch.from_numpy(mask)
+                # if "image_features" in data:
+                #     image_features = data["image_features"].numpy()
+                #     data["image_features"] = torch.from_numpy(image_features)
                 cached_train.append(data)
 
             else:
@@ -222,12 +222,12 @@ class FullImageDatamanager(DataManager, Generic[TDataset]):
                 image = data["image"].numpy()
                 data["image"] = torch.from_numpy(image)
                 cached_eval.append(data)
-                if "mask" in data:
-                    mask = data["mask"].numpy()
-                    data["mask"] = torch.from_numpy(mask)
-                if "image_features" in data:
-                    image_features = data["image_features"].numpy()
-                    data["image_features"] = torch.from_numpy(image_features)
+                # if "mask" in data:
+                #     mask = data["mask"].numpy()
+                #     data["mask"] = torch.from_numpy(mask)
+                # if "image_features" in data:
+                #     image_features = data["image_features"].numpy()
+                #     data["image_features"] = torch.from_numpy(image_features)
 
         else:
             for i in tqdm(range(len(self.eval_dataset)), leave=False):
