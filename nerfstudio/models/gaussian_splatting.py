@@ -775,8 +775,10 @@ class GaussianSplattingModel(Model):
 
         # rescale the camera back to original dimensions
         # camera.rescale_output_resolution(camera_downscale)
-
-        return {"rgb": rgb, "depth": depth_im, "feat_out": out_features}
+        if self.config.distill_type == "overfit":
+            return {"rgb": rgb, "depth": depth_im, "feat_out": out_features}
+        else:
+            return {"rgb": rgb, "depth": depth_im, "openset_feat_out": out_features}
 
     def get_metrics_dict(self, outputs, batch) -> Dict[str, torch.Tensor]:
         """Compute and returns metrics.
@@ -890,12 +892,12 @@ class GaussianSplattingModel(Model):
 
             # check if the features or input are not nan
 
-            if torch.isnan(outputs["feat_out"]).any():
+            if torch.isnan(outputs["openset_feat_out"]).any():
                 print("features are nan")
             elif torch.isnan(gt_features).any():
                 print("gt features are nan")
 
-            semantic_loss = (1 - torch.nn.CosineSimilarity(eps=1e-3)(outputs["feat_out"], gt_features)).mean()
+            semantic_loss = (1 - torch.nn.CosineSimilarity(eps=1e-3)(outputs["openset_feat_out"], gt_features)).mean()
             # semantic_loss = torch.nn.L1Loss()(outputs["feat_out"], gt_features)
         return {
             "rgb_loss": (1 - self.config.ssim_lambda) * Ll1,
@@ -1014,7 +1016,7 @@ class GaussianSplattingModel(Model):
             combined_semantic = torch.cat([gt_semantic, predicted_semantic], dim=1)
 
         else:
-            pedict = self.get_pred_openset_segmentations(outputs["feat_out"], self.text_features)
+            pedict = self.get_pred_openset_segmentations(outputs["openset_feat_out"], self.text_features)
             predicted_semantc = self.map_openset_semantic_to_color(pedict)
             combined_semantic = predicted_semantc
 

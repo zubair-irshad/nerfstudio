@@ -155,7 +155,7 @@ def _render_trajectory_video(
     cameras = cameras.to(pipeline.device)
     fps = len(cameras) / seconds
 
-    if "feat_out" in rendered_output_names:
+    if "openset_feat_out" in rendered_output_names:
         print("Obtaining text features")
         text_features = obtain_text_features()
         text_features = text_features.to(pipeline.device)
@@ -225,7 +225,7 @@ def _render_trajectory_video(
                     output_image = outputs[rendered_output_name]
                     is_depth = rendered_output_name.find("depth") != -1
                     is_features = rendered_output_name.find("feat_out") != -1
-                    is_openset_features = rendered_output_name.find("feat_out") != -1
+                    is_openset_features = rendered_output_name.find("openset_feat_out") != -1
                     if is_depth:
                         output_image = (
                             colormaps.apply_depth_colormap(
@@ -239,13 +239,12 @@ def _render_trajectory_video(
                             .numpy()
                         )
                     elif is_features:
-                        # output_image = (visualize_pred_uncertainity(output_image)).cpu().numpy()
                         output_image = (visualize_pred_semantic(output_image)).cpu().numpy()
 
                     elif is_openset_features:
                         rgb_output = outputs["rgb"]
-                        pedict = get_pred_openset_segmentations(outputs["feat_out"], text_features)
-                        predicted_semantc = map_openset_semantic_to_color(pedict, rgb_output=rgb_output)
+                        pedict = get_pred_openset_segmentations(outputs["openset_feat_out"], text_features)
+                        output_image = (map_openset_semantic_to_color(pedict, rgb_output=rgb_output)).cpu().numpy()
 
                     else:
                         output_image = (
