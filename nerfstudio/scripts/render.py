@@ -88,6 +88,8 @@ def map_openset_semantic_to_color(logits, rgb_output=None, num_text_classes=8):
 
     rgb_output = rgb_output.cpu().numpy()
     colour_map_np = label_colormap()[np.arange(1, num_text_classes + 1)]
+
+    print("color_map_np", colour_map_np)
     # colour_map_np = label_colormap()[np.arange(0, num_text_classes)]
     semantic_image = colour_map_np[logits]
     semantic_image = semantic_image.astype(np.float32) / 255.0
@@ -116,7 +118,7 @@ def visualize_pred_uncertainity(logits):
 def obtain_text_features():
     """obtain the CLIP text feature and palette."""
 
-    label_src = "sofa, floor, wall, wooden table, ceiling, window, bag, others"
+    label_src = "sofa, floor, wall, wooden table, ceiling, window, bag, painting, pot, others"
     clip_pretrained = make_clip()
     text_features = extract_clip_features(clip_pretrained, label_src)
     return text_features
