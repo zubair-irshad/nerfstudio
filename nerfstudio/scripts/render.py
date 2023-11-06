@@ -118,7 +118,7 @@ def visualize_pred_uncertainity(logits):
 def obtain_text_features():
     """obtain the CLIP text feature and palette."""
 
-    label_src = "sofa, floor, wall, wooden table, ceiling, window, bag, painting, pot, others"
+    label_src = "sofa, floor, wall, wooden table, ceiling, window, bag, painting, pot, cushion, others"
     clip_pretrained = make_clip()
     text_features = extract_clip_features(clip_pretrained, label_src)
     return text_features, len(label_src.split(","))
