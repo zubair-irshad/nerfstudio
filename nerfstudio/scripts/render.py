@@ -86,6 +86,7 @@ def get_pred_openset_segmentations(image_features, text_features):
 def map_openset_semantic_to_color(logits, rgb_output=None, num_text_classes=8):
     # I don't want to select colrmap 0 select 1:
 
+    rgb_output = rgb_output.cpu().numpy()
     colour_map_np = label_colormap()[np.arange(1, num_text_classes + 1)]
     # colour_map_np = label_colormap()[np.arange(0, num_text_classes)]
     semantic_image = colour_map_np[logits]
@@ -94,6 +95,7 @@ def map_openset_semantic_to_color(logits, rgb_output=None, num_text_classes=8):
 
     if rgb_output is not None:
         # blend rgb output with semantic output
+        print("semantic image rgb shape: ", semantic_image.shape, rgb_output.shape)
         semantic_image = semantic_image * 0.7 + rgb_output * 0.3
 
     return semantic_image
