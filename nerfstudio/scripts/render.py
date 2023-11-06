@@ -39,20 +39,17 @@ from imgviz import label_colormap
 from jaxtyping import Float
 from rich import box, style
 from rich.panel import Panel
-from rich.progress import (BarColumn, Progress, TaskProgressColumn, TextColumn,
-                           TimeElapsedColumn, TimeRemainingColumn)
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 from rich.table import Table
 from torch import Tensor
 from typing_extensions import Annotated
 
-from nerfstudio.cameras.camera_paths import (get_interpolated_camera_path,
-                                             get_path_from_json,
-                                             get_spiral_path)
+from nerfstudio.cameras.camera_paths import get_interpolated_camera_path, get_path_from_json, get_spiral_path
 from nerfstudio.cameras.cameras import Cameras, CameraType, RayBundle
-from nerfstudio.data.datamanagers.base_datamanager import (
-    VanillaDataManager, VanillaDataManagerConfig)
+from nerfstudio.data.datamanagers.base_datamanager import VanillaDataManager, VanillaDataManagerConfig
 from nerfstudio.data.datasets.base_dataset import Dataset
 from nerfstudio.data.scene_box import OrientedBox
+from nerfstudio.data.utils.clip_utils import extract_clip_features, make_clip
 from nerfstudio.data.utils.dataloaders import FixedIndicesEvalDataloader
 from nerfstudio.engine.trainer import TrainerConfig
 from nerfstudio.model_components import renderers
@@ -62,23 +59,49 @@ from nerfstudio.utils.eval_utils import eval_setup
 from nerfstudio.utils.rich_utils import CONSOLE, ItersPerSecColumn
 from nerfstudio.utils.scripts import run_command
 
-logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1),dim=-1)
+logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1), dim=-1)
 import matplotlib.pyplot as plt
 
 
-def visualize_pred_semantic(logits, feature_size = 29):
+def visualize_pred_semantic(logits, feature_size=29):
     # logits = torch.argmax(logits, dim=-1)
-    logits =  torch.argmax(torch.nn.functional.softmax(logits, dim=-1),dim=-1)
-    colour_map_np = label_colormap()[np.arange(0,feature_size)]
+    logits = torch.argmax(torch.nn.functional.softmax(logits, dim=-1), dim=-1)
+    colour_map_np = label_colormap()[np.arange(0, feature_size)]
     semantic_image = colour_map_np[logits.cpu().numpy()]
     semantic_image = semantic_image.astype(np.float32) / 255.0
     semantic_image = torch.from_numpy(semantic_image)
     return semantic_image
 
 
+def get_pred_openset_segmentations(image_features, text_features):
+    imshape = image_features.shape
+    image_features = image_features.reshape(-1, imshape[-1])
+    logits_per_image = image_features @ text_features.t()
+    out = logits_per_image.float().view(imshape[0], imshape[1], -1)
+    predict = torch.max(out, -1)[1]
+    predict = predict.cpu().numpy()
+    return predict
+
+
+def map_openset_semantic_to_color(logits, rgb_output=None, num_text_classes=8):
+    # I don't want to select colrmap 0 select 1:
+
+    colour_map_np = label_colormap()[np.arange(1, num_text_classes + 1)]
+    # colour_map_np = label_colormap()[np.arange(0, num_text_classes)]
+    semantic_image = colour_map_np[logits]
+    semantic_image = semantic_image.astype(np.float32) / 255.0
+    semantic_image = torch.from_numpy(semantic_image)
+
+    if rgb_output is not None:
+        # blend rgb output with semantic output
+        semantic_image = semantic_image * 0.7 + rgb_output * 0.3
+
+    return semantic_image
+
+
 def visualize_pred_uncertainity(logits):
-    uncert = torch.sum(-F.log_softmax(logits, dim=-1)*F.softmax(logits, dim=-1), dim=-1, keepdim=True)
-    cmap = plt.get_cmap('viridis')
+    uncert = torch.sum(-F.log_softmax(logits, dim=-1) * F.softmax(logits, dim=-1), dim=-1, keepdim=True)
+    cmap = plt.get_cmap("viridis")
     uncert = uncert.squeeze(-1)
     norm = plt.Normalize(uncert.min(), uncert.max())
     uncert = cmap(norm(uncert.cpu().numpy()))
@@ -86,6 +109,15 @@ def visualize_pred_uncertainity(logits):
     uncert = torch.from_numpy(uncert[:, :, :3])
     uncert = (255 * torch.clamp(uncert, 0, 1)).type(torch.uint8)
     return uncert
+
+
+def obtain_text_features():
+    """obtain the CLIP text feature and palette."""
+
+    label_src = "sofa, floor, wall, wooden table, ceiling, window, bag, others"
+    clip_pretrained = make_clip()
+    text_features = extract_clip_features(clip_pretrained, label_src)
+    return text_features
 
 
 def _render_trajectory_video(
@@ -122,6 +154,11 @@ def _render_trajectory_video(
     cameras.rescale_output_resolution(rendered_resolution_scaling_factor)
     cameras = cameras.to(pipeline.device)
     fps = len(cameras) / seconds
+
+    if "feat_out" in rendered_output_names:
+        print("Obtaining text features")
+        text_features = obtain_text_features()
+        text_features = text_features.to(pipeline.device)
 
     progress = Progress(
         TextColumn(":movie_camera: Rendering :movie_camera:"),
@@ -165,8 +202,7 @@ def _render_trajectory_video(
                             camera_ray_bundle, camera=cameras[camera_idx : camera_idx + 1]
                         )
                 else:
-
-                    #measure this time
+                    # measure this time
 
                     start_time = time.time()
                     with torch.no_grad():
@@ -175,7 +211,7 @@ def _render_trajectory_video(
                         )
                     end_time = time.time()
                     print("Time taken for inference: ", end_time - start_time)
-                    print("FPS: ", 1/(end_time - start_time))
+                    print("FPS: ", 1 / (end_time - start_time))
 
                 render_image = []
                 for rendered_output_name in rendered_output_names:
@@ -189,6 +225,7 @@ def _render_trajectory_video(
                     output_image = outputs[rendered_output_name]
                     is_depth = rendered_output_name.find("depth") != -1
                     is_features = rendered_output_name.find("feat_out") != -1
+                    is_openset_features = rendered_output_name.find("feat_out") != -1
                     if is_depth:
                         output_image = (
                             colormaps.apply_depth_colormap(
@@ -204,6 +241,11 @@ def _render_trajectory_video(
                     elif is_features:
                         # output_image = (visualize_pred_uncertainity(output_image)).cpu().numpy()
                         output_image = (visualize_pred_semantic(output_image)).cpu().numpy()
+
+                    elif is_openset_features:
+                        rgb_output = outputs["rgb"]
+                        pedict = get_pred_openset_segmentations(outputs["feat_out"], text_features)
+                        predicted_semantc = map_openset_semantic_to_color(pedict, rgb_output=rgb_output)
 
                     else:
                         output_image = (
