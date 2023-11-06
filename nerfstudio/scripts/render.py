@@ -121,7 +121,7 @@ def obtain_text_features():
     label_src = "sofa, floor, wall, wooden table, ceiling, window, bag, painting, pot, others"
     clip_pretrained = make_clip()
     text_features = extract_clip_features(clip_pretrained, label_src)
-    return text_features
+    return text_features, len(label_src.split(","))
 
 
 def _render_trajectory_video(
@@ -161,7 +161,7 @@ def _render_trajectory_video(
 
     if "openset_feat_out" in rendered_output_names:
         print("Obtaining text features")
-        text_features = obtain_text_features()
+        text_features, num_text_features = obtain_text_features()
         text_features = text_features.to(pipeline.device)
 
     progress = Progress(
@@ -251,7 +251,15 @@ def _render_trajectory_video(
                     elif is_openset_features:
                         rgb_output = outputs["rgb"]
                         pedict = get_pred_openset_segmentations(outputs["openset_feat_out"], text_features)
-                        output_image = (map_openset_semantic_to_color(pedict, rgb_output=rgb_output)).cpu().numpy()
+                        output_image = (
+                            (
+                                map_openset_semantic_to_color(
+                                    pedict, rgb_output=rgb_output, num_text_classes=num_text_features
+                                )
+                            )
+                            .cpu()
+                            .numpy()
+                        )
 
                     else:
                         output_image = (
