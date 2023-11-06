@@ -224,8 +224,10 @@ def _render_trajectory_video(
                         sys.exit(1)
                     output_image = outputs[rendered_output_name]
                     is_depth = rendered_output_name.find("depth") != -1
-                    is_features = rendered_output_name.find("feat_out") != -1
                     is_openset_features = rendered_output_name.find("openset_feat_out") != -1
+                    if not is_openset_features:
+                        is_features = rendered_output_name.find("feat_out") != -1
+
                     if is_depth:
                         output_image = (
                             colormaps.apply_depth_colormap(
