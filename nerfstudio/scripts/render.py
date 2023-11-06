@@ -203,7 +203,6 @@ def _render_trajectory_video(
                         )
                 else:
                     # measure this time
-
                     start_time = time.time()
                     with torch.no_grad():
                         outputs = pipeline.model.get_outputs_for_camera_ray_bundle(
@@ -227,6 +226,8 @@ def _render_trajectory_video(
                     is_openset_features = rendered_output_name.find("openset_feat_out") != -1
                     if not is_openset_features:
                         is_features = rendered_output_name.find("feat_out") != -1
+                    else:
+                        is_features = False
 
                     if is_depth:
                         output_image = (
