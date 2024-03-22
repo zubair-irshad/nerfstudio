@@ -617,7 +617,7 @@ method_configs["gaussian-splatting"] = TrainerConfig(
         # ),
 
         datamanager=FullImageDatamanagerConfig(
-            dataparser=BlenderDataParserConfig(),
+            dataparser=BlenderDataParserConfig(load_3d_points=True),
         ),
         # datamanager=FullImageDatamanagerConfig(
         #     dataparser=ColmapDataParserConfig(load_3D_points=True),

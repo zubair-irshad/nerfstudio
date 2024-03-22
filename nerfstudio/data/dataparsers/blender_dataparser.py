@@ -67,24 +67,48 @@ class Blender(DataParser):
 
 
     def _load_3D_points(self):
-        num_pts = 1000000
-        min_bound = np.array([-4, -4, -4])
-        max_bound = np.array([4, 4, 4])
-        # num_pts = 10  # Change this to the desired number of random points
 
-        # Generate random points within the specified bounds
-        # xyz = np.random.rand(num_pts, 3)  # Generates random values between 0 and 1
-        # xyz = xyz * (max_bound - min_bound) + min_bound
+        random = False
 
-        xyz = np.random.uniform(min_bound, max_bound, size=(num_pts, 3))
+        if random:
+            num_pts = 1000000
+            min_bound = np.array([-4, -4, -4])
+            max_bound = np.array([4, 4, 4])
+            # num_pts = 10  # Change this to the desired number of random points
 
-        rgb = np.random.random((num_pts, 3)) * 255.0
-        xyz = torch.from_numpy(xyz).float()
-        rgb = torch.from_numpy(rgb).float()
-        out = {
-            "points3D_xyz": xyz,
-            "points3D_rgb": rgb,
-        }
+            # Generate random points within the specified bounds
+            # xyz = np.random.rand(num_pts, 3)  # Generates random values between 0 and 1
+            # xyz = xyz * (max_bound - min_bound) + min_bound
+
+            xyz = np.random.uniform(min_bound, max_bound, size=(num_pts, 3))
+
+            rgb = np.random.random((num_pts, 3)) * 255.0
+            xyz = torch.from_numpy(xyz).float()
+            rgb = torch.from_numpy(rgb).float()
+            out = {
+                "points3D_xyz": xyz,
+                "points3D_rgb": rgb,
+            }
+            print("Successfully generated random points3D.txt", xyz.shape, rgb.shape)
+        else:
+            # pcd_path = load_from_json(self.data / "points3D.txt")
+            pcd_path = self.data / "points3D.txt"
+
+            points_data = np.loadtxt(pcd_path, comments=["#", "POINT3D_ID"], usecols=range(12))
+
+            points_xyz = points_data[:, 1:4]
+            points_color = points_data[:, 4:7]
+
+            points_xyz = torch.from_numpy(points_xyz).float()
+            points_color = torch.from_numpy(points_color).float()
+
+            out = {
+                "points3D_xyz": points_xyz,
+                "points3D_rgb": points_color,
+            }
+            print("Successfully loaded points3D.txt", points_xyz.shape, points_color.shape)
+
+
         return out
 
 
@@ -99,7 +123,11 @@ class Blender(DataParser):
         poses = []
         mask_filenames = []
         for frame in meta["frames"]:
-            fname = self.data / Path(frame["file_path"].replace("./", "") + ".png")
+            
+            if frame["file_path"].startswith("./"):
+                fname = self.data / Path(frame["file_path"].replace("./", "") + ".png")
+            else:
+                fname = self.data / Path(frame["file_path"])
             image_filenames.append(fname)
             poses.append(np.array(frame["transform_matrix"]))
             if self.config.masks_path is not None:
@@ -125,10 +153,16 @@ class Blender(DataParser):
 
         camera_to_worlds = torch.from_numpy(poses)  # camera to world transform
         
+        # camera_to_worlds, transform = camera_utils.auto_orient_and_center_poses(
+        #     camera_to_worlds,
+        #     method="up",
+        #     center_method="none",
+        # )
+
         camera_to_worlds, transform = camera_utils.auto_orient_and_center_poses(
             camera_to_worlds,
-            method="up",
-            center_method="none",
+            method="none",
+            center_method="poses",
         )
 
         # camera_to_world = torch.from_numpy(poses[:, :3])  # camera to world transform
@@ -151,8 +185,11 @@ class Blender(DataParser):
 
         meta_data = {}
             # Load 3D points
-        if self.config.load_3d_points:
-            meta_data.update(self._load_3D_points())
+
+        print("self.config.load_3d_points", self.config.load_3d_points)
+        # if self.config.load_3d_points:
+            # meta_data.update(self._load_3D_points())
+        meta_data.update(self._load_3D_points())
 
 
         dataparser_outputs = DataparserOutputs(
